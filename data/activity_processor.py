@@ -71,7 +71,7 @@ def process(read_folder_path, write_folder_path):
 
     source_folders = [
         "strava_export/decompressed",
-        "tcx_kaggle"
+        # "tcx_kaggle"
     ]
 
     destination_folder = "processed_activities"
