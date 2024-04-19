@@ -14,32 +14,6 @@ from sklearn.pipeline import Pipeline
 import numpy as np
 import pickle
 
-
-def oversample(df, row_ratio=0.3, sample_min = 1.05, sample_max=1.15, target_feature="duration_minutes"):
-    """
-    Oversample the data to create new rows with. Creates new rows with the target feature modified.
-    :param df: Dataframe with the data
-    :param row_ratio: Ratio of rows to be created
-    :param sample_ratio: Ratio space for the new data
-    :param target_feature: Target feature to be modified
-    :return: Dataframe with the new rows
-    :rtype: pd.DataFrame
-    """
-
-    n_new_rows = int(len(df) * row_ratio)
-    oversampled_df = pd.DataFrame(columns=df.columns)
-
-    for i in range(n_new_rows):
-        row = df.sample()
-        row = row.copy()
-        org_value = row[target_feature].values[0]
-        new_value = np.random.uniform(org_value * sample_min, org_value * sample_max)
-        row[target_feature] = new_value
-        oversampled_df = pd.concat([oversampled_df, row])
-
-    return oversampled_df
-
-
 def save_model(model, model_path, stats_path, stat_dict, best_model=None):
     """
     Save model and stats to disk in same directory
@@ -76,23 +50,17 @@ data_df = pd.read_csv("preprocessed.csv")
 # Remove idx=0 and idx=1 cols
 data_df = data_df.drop(data_df.columns[[0, 1]], axis=1)
 
-# Create new dataframe with oversampled data
-oversamples = oversample(data_df)
-
-# Concatenate dataframes
-# oversampled_df = pd.concat([data_df, oversamples])
-#
-# print("Dataframe shape: ", data_df.shape)
-# print("Oversampled dataframe shape: ", oversampled_df.shape)
-
 # Split data into X and y
 target_feature = "duration_minutes"
-X = data_df.drop(target_feature, axis=1)
-y = data_df[target_feature]
 
 
-def train_ridge_model(X, y):
+
+def train_ridge_model(data, save_model_path, save_model_stats_path):
     print("--- Training Ridge model ---")
+
+    X = data_df.drop(target_feature, axis=1)
+    y = data_df[target_feature]
+
     # Create pipeline
     # OHE categorical features
     # Standardize numerical features
@@ -149,8 +117,6 @@ def train_ridge_model(X, y):
     print("R2: ", r2)
 
     # Save model
-    model_path = "ridge_model.pkl"
-    stats_path = "ridge_stats.csv"
     stat_dict = {
         "rows": [len(data_df)],
         "columns": [len(data_df.columns)],
@@ -160,7 +126,7 @@ def train_ridge_model(X, y):
         "mae": [mae],
         "r2": [r2]
     }
-    save_model(final_model, model_path, stats_path, stat_dict)
+    save_model(final_model, save_model_path, save_model_stats_path, stat_dict)
 
 
 def train_svr_model(X, y):
@@ -171,4 +137,4 @@ def train_mlp_model(X, y):
     pass
 
 
-train_ridge_model(X, y)
+train_ridge_model(data_df, "ridge_model.pkl", "ridge_stats.csv")
