@@ -1,2 +1,0 @@
-rows,columns,cv,scoring,mse,mae,r2
-74,11,4,neg_mean_squared_error,50.14271845190227,5.333740100180633,0.8596712788011204
