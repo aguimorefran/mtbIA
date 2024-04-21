@@ -9,6 +9,8 @@ from sklearn.pipeline import Pipeline
 from sklearn.svm import SVR
 from scikeras.wrappers import KerasRegressor
 from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+import tensorflow as tf
 import pickle
 import os
 
@@ -135,55 +137,10 @@ def train_MLP_model(data_df, save_model_path, save_model_stats_path):
 
     X, y, preprocessor = prepare_data(data_df)
 
-    # Create the build model function. It must accept a dictionary of hyperparameters for later grid search
+    processed_data = preprocessor.fit_transform(X)
 
-    def build_model(hyperparameters):
-        # Accept neuron, layer, optimizer hyperparameters
-        model = Sequential()
-        for i in range(hyperparameters['layers']):
-            if i == 0:
-                model.add(Dense(hyperparameters['units'], input_dim=X.shape[1], activation='relu'))
-            else:
-                model.add(Dense(hyperparameters['units'], activation='relu'))
-        model.add(Dense(1, activation='linear'))
-        model.compile(optimizer=hyperparameters['optimizer'], loss='mean_squared_error')
-        return model
-    
-    # Create the KerasRegressor object
-    keras_regressor = KerasRegressor(build_fn=build_model, verbose=0)
+    def 
 
-    param_grid = {
-        'layers': [1, 2, 3],
-        'units': [32, 64, 128],
-        'optimizer': ['adam', 'rmsprop']
-    }
-
-    pipeline = Pipeline(steps=[('preprocessor', preprocessor), ('keras_regressor', keras_regressor)])
-
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    grid_search = GridSearchCV(pipeline, param_grid, cv=4, scoring='neg_mean_squared_error', return_train_score=True, verbose=1)
-    grid_search.fit(X_train, y_train)
-
-    print("Finished training MLP model")
-
-    final_model = grid_search.best_estimator_
-    predictions = final_model.predict(X_test)
-    mse = mean_squared_error(y_test, predictions)
-    mae = mean_absolute_error(y_test, predictions)
-    r2 = r2_score(y_test, predictions)
-
-    print("Best params: ", grid_search.best_params_)
-    print("MSE: ", mse)
-    print("MAE: ", mae)
-    print("R2: ", r2)
-
-    stat_dict = {
-        'mse': mse, 'mae': mae, 'r2': r2, 
-        'best_params': grid_search.best_params_
-    }
-    
-    save_model(final_model, save_model_path, save_model_stats_path, stat_dict)
 
 train_MLP_model(data_df, "mlp_model.pkl", "mlp_stats.csv")
 
