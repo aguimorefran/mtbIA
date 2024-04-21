@@ -1,0 +1,2 @@
+mse,mae,r2,best_params
+231321.12404501735,379.2326562976506,0.8201744134557875,"{'ridge__alpha': 1, 'ridge__max_iter': 5000, 'ridge__solver': 'saga'}"
