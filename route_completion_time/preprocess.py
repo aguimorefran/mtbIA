@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import tqdm
+from tqdm import tqdm
 
 processed_activities_file = "../data/ready_data.csv"
 df_activity = pd.read_csv(processed_activities_file)
@@ -14,96 +14,66 @@ COLS_TO_KEEP = [
     "altitude"
 ]
 
-GRADE_CUTS = [-np.inf, -1, 4, 8, 12, 20, np.inf]
-GRADE_LABELS = [
-    "downhill",
-    "green",
-    "yellow",
-    "orange",
-    "red",
-    "black"
-]
+SLOPE_CUTS = [-np.inf, -1, 4, 8, 12, 20, np.inf]
+SLOPE_LABELS = ["downhill", "green", "yellow", "orange", "red", "black"]
 
-YEAR_SEASONS = {
-    1: "winter",
-    2: "winter",
-    3: "spring",
-    4: "spring",
-    5: "spring",
-    6: "summer",
-    7: "summer",
-    8: "summer",
-    9: "fall",
-    10: "fall",
-    11: "fall",
-    12: "winter"
-}
+YEAR_SEASONS = {1: "winter", 2: "winter", 3: "spring", 4: "spring", 5: "spring", 6: "summer",
+                7: "summer", 8: "summer", 9: "fall", 10: "fall", 11: "fall", 12: "winter"}
 
 TIME_OF_DAY_CUTS = [0, 6, 12, 18, 24]
-TIME_OF_DAY_LABELS = [
-    "night",
-    "morning",
-    "afternoon",
-    "evening"
-]
+TIME_OF_DAY_LABELS = ["night", "morning", "afternoon", "evening"]
 
-def preprocess(data):
-    print("Preprocessing data...")
-    df = data.copy()
-    df = df[COLS_TO_KEEP]
+def process_activity_by_id(data, id):
+    df = data[data["id"] == id][COLS_TO_KEEP].copy()
     df["timestamp"] = pd.to_datetime(df["timestamp"])
-    df["elapsed"] = (df["timestamp"] - df["timestamp"].min()).dt.total_seconds()
+    df.sort_values(by=["timestamp"], inplace=True)
+    # Calculate slope with safe division
+    df["altitude"] = df["altitude"].fillna(0)
+    df["slope"] = np.where(df["distance"].diff() != 0, df["altitude"].diff() / df["distance"].diff() * 100, 0)
+    df["slope"] = df["slope"].fillna(0)
+    df["altitude_diff"] = df["altitude"].diff()
+    df["elapsed_time"] = (df["timestamp"] - df["timestamp"].iloc[0]).dt.total_seconds()
     df["season"] = df["timestamp"].dt.month.map(YEAR_SEASONS)
     df["time_of_day"] = pd.cut(df["timestamp"].dt.hour, bins=TIME_OF_DAY_CUTS, labels=TIME_OF_DAY_LABELS)
-    df["distance_diff"] = df["distance"].diff()
-    df["altitude_diff"] = df["altitude"].diff()
-    df["grade"] = df["altitude_diff"] / df["distance_diff"]
-    df["grade"] = df["grade"].fillna(0)
-    df["altitude_diff"] = df["altitude_diff"].fillna(0)
-    df["distance_diff"] = df["distance_diff"].fillna(0)
-    df["grade_category"] = pd.cut(df["grade"], bins=GRADE_CUTS, labels=GRADE_LABELS)
+    df["slope_color"] = pd.cut(df["slope"], bins=SLOPE_CUTS, labels=SLOPE_LABELS)
+    
     return df
 
-def aggregate_by_id(data, contains_time):
-    # New columns
-    # - distance_meters = sum(distance)
+def process_all_activities(data):
+    id_list = data["id"].unique()
+    processed_activities = [process_activity_by_id(data, id) for id in tqdm(id_list)]
+    df_agg = pd.concat(processed_activities)
+
+    return df_agg
+
+def aggregate_waypoints(data):
+    # Aggregates all the waypoints of an activity
+    # - distance = max distance
     # - ascent_meters = sum of positive altitude_diff
-    # - elapsed_minutes = max(elapsed) / 60
-    # - season = mode(season)
-    # - time_of_day = mode(time_of_day)
-    # - {grade_cat}_pctg = sum(distance_diff[grade_category == grade_cat])
+    # - elapsed_time = max elapsed_time
+    # - season = most common season
+    # - time_of_day = most common time_of_day
 
-    print("Aggregating data...")
-    if contains_time:
-        df_agg = data.groupby("id").agg(
-            distance_meters=("distance", "sum"),
-            ascent_meters=("altitude_diff", lambda x: sum(x[x > 0])),
-            elapsed_minutes=("elapsed", lambda x: max(x) / 60),
-            season=("season", lambda x: x.mode().values[0]),
-            time_of_day=("time_of_day", lambda x: x.mode().values[0])
-        ).reset_index()
-    else:
-        df_agg = data.groupby("id").agg(
-            distance_meters=("distance", "sum"),
-            ascent_meters=("altitude_diff", lambda x: sum(x[x > 0])),
-            season=("season", lambda x: x.mode().values[0]),
-            time_of_day=("time_of_day", lambda x: x.mode().values[0])
-        ).reset_index()
+    df_agg = data.groupby("id").agg(
+        distance=("distance", "max"),
+        ascent_meters=("altitude_diff", lambda x: x[x > 0].sum()),
+        elapsed_time=("elapsed_time", "max"),
+        season=("season", lambda x: x.value_counts().idxmax()),
+        time_of_day=("time_of_day", lambda x: x.value_counts().idxmax()),
+    ).reset_index()
 
-    grade_cat_pivot = data.pivot_table(observed=False, index='id', columns='grade_category', values='distance', aggfunc='sum', fill_value=0)
-    grade_cat_pctg = grade_cat_pivot.div(grade_cat_pivot.sum(axis=1), axis=0)
-    grade_cat_pctg.columns = [f'{col}_pctg' for col in grade_cat_pctg.columns]
-    df_agg = df_agg.merge(grade_cat_pctg, left_on='id', right_index=True)
+    # Calculate the percentage of each slope color in the activity per total distance
+    df_slope_color = data.groupby(["id", "slope_color"]).agg(
+        distance=("distance", "sum")
+    ).reset_index()
+    df_slope_color = df_slope_color.pivot(index="id", columns="slope_color", values="distance").fillna(0)
+    df_slope_color = df_slope_color.div(df_slope_color.sum(axis=1), axis=0)
+    df_slope_color.columns = [f"{col}_pctg" for col in df_slope_color.columns]
+    df_agg = pd.merge(df_agg, df_slope_color, on="id")
 
 
     return df_agg
 
-def preprocess_and_aggregate(data, contains_time):
-    df = preprocess(data)
-    df = aggregate_by_id(df, contains_time)
-
-    # Save in preprocessed.csv
-    df.to_csv("preprocessed.csv", index=False)
-    print("Preprocessed data saved in preprocessed.csv")
-
-preprocess_and_aggregate(df_activity, contains_time=True)
+df_activity = process_all_activities(df_activity)
+df_activity = aggregate_waypoints(df_activity)
+df_activity.to_csv("preprocessed.csv")
