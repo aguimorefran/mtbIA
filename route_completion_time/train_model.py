@@ -3,7 +3,7 @@ import pickle
 
 import pandas as pd
 from sklearn.compose import ColumnTransformer
-from sklearn.linear_model import Ridge
+from sklearn.linear_model import Ridge, Lasso, MultiTaskElasticNet, ElasticNet
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import train_test_split
@@ -86,36 +86,22 @@ def train_ridge_model(data_df, save_model_path, save_model_stats_path):
     }
     save_model(final_model, save_model_path, save_model_stats_path, stat_dict)
 
-
-data_df = pd.read_csv("preprocessed.csv")
-data_df.drop(data_df.columns[[0, 1]], axis=1, inplace=True)
-data_df.dropna(inplace=True)
-
-
-def train_svr_lineal_model(data_df, save_model_path, save_model_stats_path):
+def train_regressor(data_df, save_model_path, save_model_stats_path, params, regressor_object, regressor_name):
     print("-" * 50)
-    print("Training SVR Linear model")
+    print(f"Training {regressor_name} model")
+
     X, y, preprocessor = prepare_data(data_df)
 
-
-
-    svr = SVR(kernel='linear')
-
-    param_grid = {
-        'svr__C': [0.001, 0.1, 1, 10, 100],
-        'svr__epsilon': [0.1, 0.2, 0.5, 1],
-        'svr__max_iter': [1000, 5000, 10000, 50000]
-    }
-
-    pipeline = Pipeline(steps=[('preprocessor', preprocessor), ('svr', svr)])
+    pipeline = Pipeline(steps=[('preprocessor', preprocessor), ('regressor', regressor_object)])
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    grid_search = GridSearchCV(pipeline, param_grid, cv=4, scoring='neg_mean_squared_error', return_train_score=True,
-                               verbose=1)
+    grid_search = GridSearchCV(pipeline, params, cv=4, scoring='neg_mean_squared_error', return_train_score=True,
+                                 verbose=1)
+
     grid_search.fit(X_train, y_train)
 
-    print("Finished training SVR Linear model")
+    print(f"Finished training {regressor_name} model")
 
     final_model = grid_search.best_estimator_
     predictions = final_model.predict(X_test)
@@ -135,31 +121,82 @@ def train_svr_lineal_model(data_df, save_model_path, save_model_stats_path):
 
     save_model(final_model, save_model_path, save_model_stats_path, stat_dict)
 
-    hyperparams = {
-        'hidden_layer_sizes': (15, 15, 15, 10),
-        'activation': 'relu',
-        'solver': 'sgd',
-        'learning_rate': 'adaptive',
-        'learning_rate_init': 1e-5,
-        'alpha': 0.001,
-        'max_iter': 100000
-    }
+####################
 
-    # Prepared data
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+data_df = pd.read_csv("preprocessed.csv")
+data_df.drop(data_df.columns[[0, 1]], axis=1, inplace=True)
+data_df.dropna(inplace=True)
 
-    model = make_pipeline(preprocessor, MLPRegressor(**hyperparams))
-    model.fit(X_train, y_train)
-    predictions = model.predict(X_test)
-    mse = mean_squared_error(y_test, predictions)
-    mae = mean_absolute_error(y_test, predictions)
-    r2 = r2_score(y_test, predictions)
+################
+# Ridge Model #
+################
+ridge_reg = Ridge()
+ridge_reg_params = {
+    'regressor__alpha': [0.001, 0.1, 1, 10, 100],
+    'regressor__solver': ['auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga'],
+    'regressor__max_iter': [1000, 5000, 10000, 50000]
+}
+ridge_reg_name = "Ridge"
+ridge_model_path = "ridge_model.pkl"
+ridge_stats_path = "ridge_stats.csv"
 
-    print("Finished training MLP model")
-    print("MSE: ", mse)
-    print("MAE: ", mae)
-    print("R2: ", r2)
+################
+# SVR Linear Model #
+################
 
+svr_lin_reg = SVR(kernel='linear')
+svr_lin_reg_params = {
+    'regressor__C': [0.001, 0.1, 1, 10, 100],
+    'regressor__epsilon': [0.1, 0.2, 0.5, 1],
+    'regressor__max_iter': [1000, 5000, 10000, 50000]
+}
+svr_lin_reg_name = "SVR Linear"
+svr_lin_model_path = "svr_lin_model.pkl"
+svr_lin_stats_path = "svr_lin_stats.csv"
 
-train_ridge_model(data_df, "ridge_model.pkl", "ridge_stats.csv")
-train_svr_lineal_model(data_df, "svr_model.pkl", "svr_stats.csv")
+################
+# SVR RBF Model #
+################
+
+svr_rbf_reg = SVR(kernel='rbf')
+svr_rbf_reg_params = {
+    'regressor__C': [0.001, 0.1, 1, 10, 100],
+    'regressor__epsilon': [0.1, 0.2, 0.5, 1],
+    'regressor__gamma': ['scale', 'auto']
+}
+svr_rbf_reg_name = "SVR RBF"
+svr_rbf_model_path = "svr_rbf_model.pkl"
+svr_rbf_stats_path = "svr_rbf_stats.csv"
+
+################
+# Lasso Model #
+################
+
+lasso_reg = Lasso()
+lasso_reg_params = {
+    'regressor__alpha': [0.001, 0.1, 1, 10, 100],
+    'regressor__max_iter': [1000, 5000, 10000, 50000]
+}
+lasso_reg_name = "Lasso"
+lasso_model_path = "lasso_model.pkl"
+lasso_stats_path = "lasso_stats.csv"
+
+################
+# ElasticNet Model #
+################
+
+elastic_net_reg = ElasticNet()
+elastic_net_reg_params = {
+    'regressor__alpha': [0.001, 0.1, 1, 10, 100],
+    'regressor__l1_ratio': [0.1, 0.5, 0.7, 0.9],
+    'regressor__max_iter': [10000000]
+}
+elastic_net_reg_name = "ElasticNet"
+elastic_net_model_path = "elastic_net_model.pkl"
+elastic_net_stats_path = "elastic_net_stats.csv"
+
+train_regressor(data_df, svr_lin_model_path, svr_lin_stats_path, svr_lin_reg_params, svr_lin_reg, svr_lin_reg_name)
+train_regressor(data_df, ridge_model_path, ridge_stats_path, ridge_reg_params, ridge_reg, ridge_reg_name)
+train_regressor(data_df, svr_rbf_model_path, svr_rbf_stats_path, svr_rbf_reg_params, svr_rbf_reg, svr_rbf_reg_name)
+train_regressor(data_df, lasso_model_path, lasso_stats_path, lasso_reg_params, lasso_reg, lasso_reg_name)
+train_regressor(data_df, elastic_net_model_path, elastic_net_stats_path, elastic_net_reg_params, elastic_net_reg, elastic_net_reg_name)

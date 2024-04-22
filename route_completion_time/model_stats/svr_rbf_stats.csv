@@ -1,0 +1,2 @@
+mse,mae,r2,best_params
+868619.2607331063,713.5204636532629,0.32474836144003394,"{'regressor__C': 100, 'regressor__epsilon': 0.1, 'regressor__gamma': 'auto'}"
