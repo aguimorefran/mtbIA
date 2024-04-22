@@ -110,10 +110,6 @@ route_data = process_gpx(df, SEASON, TIME_OF_DAY)
 available_models = search_models()
 print(available_models)
 
-# # Select first model
-# model_info = available_models.iloc[0]
-# model_pkl_path = os.path.join("model_stats", model_info["model_file"])
-# make_prediction(model_pkl_path, route_data)
 
 # Predict with every model
 for idx, model_info in available_models.iterrows():
