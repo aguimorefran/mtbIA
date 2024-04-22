@@ -1,18 +1,23 @@
 import pandas as pd
+from matplotlib import pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.model_selection import GridSearchCV
+from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
+from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.svm import SVR
 from scikeras.wrappers import KerasRegressor
-from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 import tensorflow as tf
 import pickle
 import os
+from hyperopt import hp, fmin, tpe, STATUS_OK, Trials
+from sklearn.model_selection import cross_val_score
+import numpy as np
+
 
 def save_model(model, model_path, stats_path, stat_dict):
     # Crete folder model_stats if it doesn't exist
@@ -91,6 +96,7 @@ data_df.drop(data_df.columns[[0, 1]], axis=1, inplace=True)
 data_df.dropna(inplace=True)
 
 
+
 def train_svr_lineal_model(data_df, save_model_path, save_model_stats_path):
     print("-"*50)
     print("Training SVR Linear model")
@@ -137,13 +143,60 @@ def train_MLP_model(data_df, save_model_path, save_model_stats_path):
 
     X, y, preprocessor = prepare_data(data_df)
 
-    processed_data = preprocessor.fit_transform(X)
+    space = {
+        'hidden_layer_sizes': hp.choice('hidden_layer_sizes', [
+            (20, 20, 10),
+            (15, 15, 15, 10),
+        ]),
+        'activation': hp.choice('activation', ['relu', 'tanh']),
+        'solver': hp.choice('solver', ['adam', 'lbfgs', 'sgd']),
+        'learning_rate': hp.choice('learning_rate', ['constant', 'adaptive']),
+        'learning_rate_init': hp.uniform('learning_rate_init', 1e-4, 1e-2),
+        'alpha': hp.uniform('alpha', 0.0001, 0.1),
+        'max_iter': hp.choice('max_iter', [10000, 50000, 100000])
+    }
 
-    def 
+    def objective(params):
+        model = make_pipeline(preprocessor, MLPRegressor(**params))
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        model.fit(X_train, y_train)
+        predictions = model.predict(X_test)
+        mse = mean_squared_error(y_test, predictions)
+        return {'loss': mse, 'status': STATUS_OK}
 
+    trials = Trials()
+    best = fmin(objective, space, algo=tpe.suggest, max_evals=100, trials=trials)
+
+    print("Best hyperparameters: ", best)
+
+    # Best hyperparameters:  {'activation': 0, 'alpha': 0.08731427541890338, 'hidden_layer_sizes': 2, 'learning_rate': 0, 'learning_rate_init': 2.5044626437879115e-05, 'max_iter': 0, 'solver': 1}
+
+    # hyperparams = {
+    #     'hidden_layer_sizes': (15, 15, 15, 10),
+    #     'activation': 'relu',
+    #     'solver': 'lbfgs',
+    #     'learning_rate': 'adaptive',
+    #     'learning_rate_init': 1e-5,
+    #     'alpha': 0.001,
+    #     'max_iter': 100000
+    # }
+    #
+    # # Prepared data
+    # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    #
+    #
+    # model = make_pipeline(preprocessor, MLPRegressor(**hyperparams))
+    # model.fit(X_train, y_train)
+    # predictions = model.predict(X_test)
+    # mse = mean_squared_error(y_test, predictions)
+    # mae = mean_absolute_error(y_test, predictions)
+    # r2 = r2_score(y_test, predictions)
+    #
+    # print("Finished training MLP model")
+    # print("MSE: ", mse)
+    # print("MAE: ", mae)
+    # print("R2: ", r2)
 
 train_MLP_model(data_df, "mlp_model.pkl", "mlp_stats.csv")
-
-
-#train_ridge_model(data_df, "ridge_model.pkl", "ridge_stats.csv")
-#train_svr_lineal_model(data_df, "svr_model.pkl", "svr_stats.csv")
+# train_ridge_model(data_df, "ridge_model.pkl", "ridge_stats.csv")
+# train_svr_lineal_model(data_df, "svr_model.pkl", "svr_stats.csv")
