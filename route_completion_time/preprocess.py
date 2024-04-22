@@ -23,6 +23,7 @@ YEAR_SEASONS = {1: "winter", 2: "winter", 3: "spring", 4: "spring", 5: "spring",
 TIME_OF_DAY_CUTS = [0, 6, 12, 18, 24]
 TIME_OF_DAY_LABELS = ["night", "morning", "afternoon", "evening"]
 
+
 def process_activity_by_id(data, id):
     df = data[data["id"] == id][COLS_TO_KEEP].copy()
     df["timestamp"] = pd.to_datetime(df["timestamp"])
@@ -36,8 +37,9 @@ def process_activity_by_id(data, id):
     df["season"] = df["timestamp"].dt.month.map(YEAR_SEASONS)
     df["time_of_day"] = pd.cut(df["timestamp"].dt.hour, bins=TIME_OF_DAY_CUTS, labels=TIME_OF_DAY_LABELS)
     df["slope_color"] = pd.cut(df["slope"], bins=SLOPE_CUTS, labels=SLOPE_LABELS)
-    
+
     return df
+
 
 def process_all_activities(data):
     id_list = data["id"].unique()
@@ -45,6 +47,7 @@ def process_all_activities(data):
     df_agg = pd.concat(processed_activities)
 
     return df_agg
+
 
 def aggregate_waypoints(data):
     # Aggregates all the waypoints of an activity
@@ -63,7 +66,7 @@ def aggregate_waypoints(data):
     ).reset_index()
 
     # Calculate the percentage of each slope color in the activity per total distance
-    df_slope_color = data.groupby(["id", "slope_color"]).agg(
+    df_slope_color = data.groupby(["id", "slope_color"], observed=False).agg(
         distance=("distance", "sum")
     ).reset_index()
     df_slope_color = df_slope_color.pivot(index="id", columns="slope_color", values="distance").fillna(0)
@@ -71,8 +74,8 @@ def aggregate_waypoints(data):
     df_slope_color.columns = [f"{col}_pctg" for col in df_slope_color.columns]
     df_agg = pd.merge(df_agg, df_slope_color, on="id")
 
-
     return df_agg
+
 
 df_activity = process_all_activities(df_activity)
 df_activity = aggregate_waypoints(df_activity)
