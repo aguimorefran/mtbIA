@@ -1,5 +1,6 @@
 import os
 import pickle
+from datetime import datetime
 
 import pandas as pd
 from sklearn.compose import ColumnTransformer
@@ -12,19 +13,30 @@ from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.svm import SVR
 
-
-def save_model(model, model_path, stats_path, stat_dict):
-    # Crete folder model_stats if it doesn't exist
+def save_model(model, model_path, stats_path, stat_dict, n_cols):
+    # Create folder model_stats if it doesn't exist
     model_path = f"model_stats/{model_path}"
     stats_path = f"model_stats/{stats_path}"
 
-    # Create folder model_stats if it doesn't exist
     if not os.path.exists("model_stats"):
         os.makedirs("model_stats")
 
+    # Save the model
     with open(model_path, "wb") as f:
         pickle.dump(model, f)
-    pd.DataFrame([stat_dict]).to_csv(stats_path, index=False)
+
+    # Add timestamp and n_cols to the stats
+    stat_dict['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    stat_dict['n_cols'] = n_cols
+
+    # If stats file exists, append a new row. Otherwise, create a new file.
+    if os.path.exists(stats_path):
+        df = pd.read_csv(stats_path)
+        df = pd.concat([df, pd.DataFrame([stat_dict])])
+    else:
+        df = pd.DataFrame([stat_dict])
+
+    df.to_csv(stats_path, index=False)
     print(f"Model saved to: {model_path}")
     print(f"Stats saved to: {stats_path}")
 
@@ -66,6 +78,7 @@ def train_ridge_model(data_df, save_model_path, save_model_stats_path):
     grid_search = GridSearchCV(pipeline, param_grid, cv=4, scoring='neg_mean_squared_error', return_train_score=True,
                                verbose=1)
     grid_search.fit(X_train, y_train)
+    grid_search.fit(X_train, y_train)
 
     print("Finished training Ridge model")
 
@@ -84,7 +97,7 @@ def train_ridge_model(data_df, save_model_path, save_model_stats_path):
         'mse': mse, 'mae': mae, 'r2': r2,
         'best_params': grid_search.best_params_
     }
-    save_model(final_model, save_model_path, save_model_stats_path, stat_dict)
+    save_model(final_model, save_model_path, save_model_stats_path, stat_dict, len(X.columns))
 
 
 def train_regressor(data_df, save_model_path, save_model_stats_path, params, regressor_object, regressor_name):
@@ -120,7 +133,7 @@ def train_regressor(data_df, save_model_path, save_model_stats_path, params, reg
         'best_params': grid_search.best_params_
     }
 
-    save_model(final_model, save_model_path, save_model_stats_path, stat_dict)
+    save_model(final_model, save_model_path, save_model_stats_path, stat_dict, len(X.columns))
 
 
 def train_MLP(data_df, save_model_path, save_model_stats_path):

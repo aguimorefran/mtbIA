@@ -1,0 +1,7 @@
+- FTP
+- Peso
+- w/kg
+- percentiles longitud maxima de cada color de pendiente
+- intervalo de confianza en la prediccion
+- porcentaje de suelo con OSM
+- ganancia altitud promedio
