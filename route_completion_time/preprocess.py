@@ -50,8 +50,8 @@ def process_all_activities(data):
 
     return df_agg
 
-def process_wellness(data):
 
+def process_wellness(data):
     return data
 
 

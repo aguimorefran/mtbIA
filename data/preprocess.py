@@ -1,10 +1,11 @@
 import os
+import shutil
+from datetime import datetime
+
 import pandas as pd
 import tqdm
-from datetime import datetime
-import shutil
-
 from dotenv import load_dotenv
+
 load_dotenv(dotenv_path="../env.py")
 import intervals
 
@@ -25,6 +26,7 @@ columns_to_keep = [
     "grade"
 ]
 
+
 def save_df(df, destination_file):
     """
     Save a dataframe to a file
@@ -38,6 +40,7 @@ def save_df(df, destination_file):
     os.makedirs(folder_path, exist_ok=True)
     df.to_csv(destination_file, index=False)
     print("Saved activity data to ", destination_file)
+
 
 def intervals_get_wellness(athlete_id, api_key, save_path, start_date="2020-01-01", end_date="today"):
     """
@@ -72,6 +75,7 @@ def intervals_get_wellness(athlete_id, api_key, save_path, start_date="2020-01-0
     print("Saved wellness data to ", save_path)
 
     return wellness_df
+
 
 def load_activity_files(activity_folder):
     """
@@ -113,6 +117,7 @@ def preprocess_activity(activity_df):
     )
 
     return activity_df
+
 
 def main():
     activity_df = load_activity_files(activity_folder)

@@ -227,13 +227,13 @@ class Intervals:
         return res.json()
 
     def power_curve(
-        self,
-        newest=datetime.datetime.now(),
-        curves="90d",
-        type="Ride",
-        include_ranks=False,
-        sub_max_efforts=0,
-        filters='[{"field_id": "type", "value": ["Ride", "VirtualRide"]}]',
+            self,
+            newest=datetime.datetime.now(),
+            curves="90d",
+            type="Ride",
+            include_ranks=False,
+            sub_max_efforts=0,
+            filters='[{"field_id": "type", "value": ["Ride", "VirtualRide"]}]',
     ):
         """ """
         url = f"{self.BASE_URL}/api/v1/athlete/{self.athlete_id}/power-curves"

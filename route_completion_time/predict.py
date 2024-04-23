@@ -8,6 +8,7 @@ from haversine import Unit
 
 from preprocess import SLOPE_CUTS, SLOPE_LABELS
 
+
 def ingest_gpx(gpx_path):
     """
     Ingest a GPX file and return a DataFrame with the relevant columns
@@ -132,6 +133,7 @@ def make_prediction(model_pkl_path, route_data, model_name):
     minutes = (pred_segs % 3600) // 60
 
     print(f"Predicted time for {model_name}: {int(hours)} hours and {int(minutes)} minutes")
+
 
 ### MAIN SCRIPT ###
 
