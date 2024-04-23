@@ -1,0 +1,5 @@
+mse,mae,r2,best_params,timestamp,col_names
+129923.9696900772,267.27635388658274,0.9364404758298499,"{'regressor__alpha': 10, 'regressor__max_iter': 1000}",2024-04-23 13:04:37,"Index(['distance', 'ascent_meters', 'elapsed_time', 'season', 'time_of_day',
+       'atl', 'ctl', 'wattkilo', 'downhill_pctg', 'green_pctg', 'yellow_pctg',
+       'orange_pctg', 'red_pctg', 'black_pctg'],
+      dtype='object')"
