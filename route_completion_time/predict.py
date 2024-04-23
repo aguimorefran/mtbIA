@@ -34,12 +34,15 @@ def ingest_gpx(gpx_path):
     return data
 
 
-def process_gpx(data, season, time_of_day):
+def process_gpx(data, season, time_of_day, watt_kilo, atl, ctl):
     """
     Process the GPX data to calculate the distance, slope, and altitude difference
     :param data: pd.DataFrame, the GPX data
     :param season: str, the season of the activity
     :param time_of_day: str, the time of day of the activity
+    :param watt_kilo: float, the watt per kilogram of the athlete
+    :param atl: int, the acute training load of the athlete
+    :param ctl: int, the chronic training load of the athlete
     :return: pd.DataFrame
 
     :rtype: pd.DataFrame
@@ -67,7 +70,10 @@ def process_gpx(data, season, time_of_day):
         "distance": distance,
         "ascent_meters": ascent_meters,
         "season": season,
-        "time_of_day": time_of_day
+        "time_of_day": time_of_day,
+        "wattkilo": watt_kilo,
+        "atl": atl,
+        "ctl": ctl
     }
 
     for idx, row in slopes_pctg.iterrows():
@@ -136,9 +142,21 @@ def make_prediction(model_pkl_path, route_data, model_name):
 
 
 ### MAIN SCRIPT ###
+#FITNESS = CTL
+#FATIGUE = ATL
 
-SEASON = "summer"
+SEASON = "spring"
 TIME_OF_DAY = "morning"
+WATTS = 220
+KILOS = 90
+WATTKILO = WATTS / KILOS
+ATL = 51
+CTL = 31
+
+RACE_ATL = 51
+RACE_CTL = 31
+
+print(f"Watt per kilo: {WATTKILO}")
 
 gpx_folder = "../data/gpx"
 preprocessor_pkl_path = "preprocessor.pkl"
@@ -151,7 +169,7 @@ for file in os.listdir(gpx_folder):
         df = ingest_gpx(gpx_path)
         print("-" * 50)
         print(f"Processing {gpx_path}")
-    route_data = process_gpx(df, SEASON, TIME_OF_DAY)
+    route_data = process_gpx(df, SEASON, TIME_OF_DAY, WATTKILO, ATL, CTL)
 
     for idx, model_info in available_models.iterrows():
         model_pkl_path = os.path.join("model_stats", model_info["model_file"])
