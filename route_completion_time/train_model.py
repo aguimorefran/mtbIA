@@ -159,9 +159,9 @@ def train_MLP(data_df, save_model_path, save_model_stats_path):
     print("Best hyperparameters:", model.named_steps['gridsearchcv'].best_params_)
     print("Best score:", model.named_steps['gridsearchcv'].best_score_)
 
-    Best
-    hyperparameters: {'activation': 'relu', 'early_stopping': True, 'hidden_layer_sizes': (15, 15, 10),
-                      'learning_rate': 'adaptive', 'learning_rate_init': 0.001, 'max_iter': 50000, 'solver': 'adam'}
+    # Best
+    # hyperparameters: {'activation': 'relu', 'early_stopping': True, 'hidden_layer_sizes': (15, 15, 10),
+    #                   'learning_rate': 'adaptive', 'learning_rate_init': 0.001, 'max_iter': 50000, 'solver': 'adam'}
 
     # mlp = MLPRegressor(
     #     ##### FILL IN #####
