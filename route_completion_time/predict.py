@@ -1,19 +1,12 @@
 import os
+import pickle
 
 import gpxpy
 import haversine as hs
 import pandas as pd
-import pickle
 from haversine import Unit
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-import numpy as np
 
 from preprocess import SLOPE_CUTS, SLOPE_LABELS
-
-gpx_path = "../data/gpx/ruta_balcon_axarquia.gpx"
-preprocessor_pkl_path = "preprocessor.pkl"
-
 
 def ingest_gpx(gpx_path):
     gpx_file = open(gpx_path, 'r')
@@ -65,7 +58,8 @@ def process_gpx(data, season, time_of_day):
 
     return pd.DataFrame(data_dict, index=[0])
 
-def search_models(models_folder="model_stats"):
+
+def search_models(models_folder="model_stats", n_models=2, verbose=False):
     models = {}
     for file in os.listdir(models_folder):
         if file.endswith("_model.pkl"):
@@ -87,8 +81,14 @@ def search_models(models_folder="model_stats"):
         stats_df["model_file"] = models[model_name]
         aggregate_stats = pd.concat([aggregate_stats, stats_df])
 
+    # Return the top n_models by R2
+    top_models = aggregate_stats.sort_values("r2", ascending=False).head(n_models)
+    if verbose:
+        for idx, row in top_models.iterrows():
+            print(f"Model: {row['model_name']}, R2: {row['test_r2']:.2f}")
 
-    return aggregate_stats
+    return top_models
+
 
 def preprocess_data(data_df, preprocessor_pkl_path="preprocessor.pkl"):
     preprocessor = pickle.load(open(preprocessor_pkl_path, 'rb'))
@@ -98,21 +98,34 @@ def preprocess_data(data_df, preprocessor_pkl_path="preprocessor.pkl"):
 def make_prediction(model_pkl_path, route_data, model_name):
     # Load model
     model = pickle.load(open(model_pkl_path, 'rb'))
-    pred_minutes = model.predict(route_data)
-    print(f"Predicted time for {model_name}: {pred_minutes[0]:.2f} minutes")
+    pred_segs = model.predict(route_data)[0]
+    hours = pred_segs // 3600
+    minutes = (pred_segs % 3600) // 60
 
+    print(f"Predicted time for {model_name}: {int(hours)} hours and {int(minutes)} minutes")
+
+### MAIN SCRIPT ###
 
 SEASON = "summer"
 TIME_OF_DAY = "morning"
 
-df = ingest_gpx(gpx_path)
-route_data = process_gpx(df, SEASON, TIME_OF_DAY)
-available_models = search_models()
-print(available_models)
+gpx_folder = "../data/gpx"
+preprocessor_pkl_path = "preprocessor.pkl"
 
+available_models = search_models(n_models=2)
 
-# Predict with every model
-for idx, model_info in available_models.iterrows():
-    model_pkl_path = os.path.join("model_stats", model_info["model_file"])
-    make_prediction(model_pkl_path, route_data, model_info["model_name"])
+for file in os.listdir(gpx_folder):
+    if file.endswith(".gpx"):
+        gpx_path = os.path.join(gpx_folder, file)
+        df = ingest_gpx(gpx_path)
+        print("-" * 50)
+        print(f"Processing {gpx_path}")
+    route_data = process_gpx(df, SEASON, TIME_OF_DAY)
 
+    for idx, model_info in available_models.iterrows():
+        model_pkl_path = os.path.join("model_stats", model_info["model_file"])
+        try:
+            make_prediction(model_pkl_path, route_data, model_info["model_name"])
+        except Exception as e:
+            print(f"Error predicting with model {model_info['model_name']}: {e}")
+            continue
