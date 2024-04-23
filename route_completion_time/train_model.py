@@ -41,8 +41,7 @@ def save_model(model, model_path, stats_path, stat_dict, n_cols):
     print(f"Stats saved to: {stats_path}")
 
 
-def prepare_data(data_df):
-    target_feature = "elapsed_time"
+def prepare_data(data_df, target_feature):
     X = data_df.drop(target_feature, axis=1)
     y = data_df[target_feature]
 
@@ -58,10 +57,10 @@ def prepare_data(data_df):
     return X, y, preprocessor
 
 
-def train_ridge_model(data_df, save_model_path, save_model_stats_path):
+def train_ridge_model(data_df, save_model_path, save_model_stats_path, target_feature):
     print("-" * 50)
     print("Training Ridge model")
-    X, y, preprocessor = prepare_data(data_df)
+    X, y, preprocessor = prepare_data(data_df, target_feature)
 
     ridge = Ridge()
 
@@ -100,11 +99,11 @@ def train_ridge_model(data_df, save_model_path, save_model_stats_path):
     save_model(final_model, save_model_path, save_model_stats_path, stat_dict, len(X.columns))
 
 
-def train_regressor(data_df, save_model_path, save_model_stats_path, params, regressor_object, regressor_name):
+def train_regressor(data_df, save_model_path, save_model_stats_path, params, regressor_object, regressor_name, target_feature):
     print("-" * 50)
     print(f"Training {regressor_name} model")
 
-    X, y, preprocessor = prepare_data(data_df)
+    X, y, preprocessor = prepare_data(data_df, target_feature)
 
     pipeline = Pipeline(steps=[('preprocessor', preprocessor), ('regressor', regressor_object)])
 
@@ -135,80 +134,9 @@ def train_regressor(data_df, save_model_path, save_model_stats_path, params, reg
 
     save_model(final_model, save_model_path, save_model_stats_path, stat_dict, len(X.columns))
 
-
-def train_MLP(data_df, save_model_path, save_model_stats_path):
-    print("-" * 50)
-    print("Training MLP model")
-    X, y, preprocessor = prepare_data(data_df)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    processed_X_train = preprocessor.fit_transform(X_train)
-    processed_X_test = preprocessor.transform(X_test)
-
-    def build_model():
-        model = MLPRegressor()
-        parameters = {
-            'hidden_layer_sizes': [
-                (15, 15, 10,),
-                (15, 15, 15, 10,),
-            ],
-            'activation': ['relu', 'tanh'],
-            'solver': ['adam'],
-            'early_stopping': [True],
-            'learning_rate': ['constant', 'adaptive'],
-            'learning_rate_init': [1e-3, 1e-4, 1e-5],
-            'max_iter': [50000],
-        }
-
-        clf = make_pipeline(StandardScaler(), GridSearchCV(model, parameters, cv=3, verbose=3))
-        return clf
-
-    model = build_model()
-    model.fit(
-        X=processed_X_train,
-        y=y_train,
-    )
-    print("Finished training MLP model")
-    print("Best hyperparameters:", model.named_steps['gridsearchcv'].best_params_)
-    print("Best score:", model.named_steps['gridsearchcv'].best_score_)
-
-    # Best
-    # hyperparameters: {'activation': 'relu', 'early_stopping': True, 'hidden_layer_sizes': (15, 15, 10),
-    #                   'learning_rate': 'adaptive', 'learning_rate_init': 0.001, 'max_iter': 50000, 'solver': 'adam'}
-
-    # mlp = MLPRegressor(
-    #     ##### FILL IN #####
-    # )
-    #
-    # mlp.fit(processed_X_train, y_train)
-    # print("Finished training MLP model")
-    # predictions = mlp.predict(processed_X_test)
-    # mse = mean_squared_error(y_test, predictions)
-    # mae = mean_absolute_error(y_test, predictions)
-    # r2 = r2_score(y_test, predictions)
-    #
-    # print("MSE: ", mse)
-    # print("MAE: ", mae)
-    # print("R2: ", r2)
-    #
-    # stat_dict = {
-    #     'mse': mse, 'mae': mae, 'r2': r2,
-    # }
-    #
-    # save_model(mlp, save_model_path, save_model_stats_path, stat_dict)
-
-
-####################
-
 data_df = pd.read_csv("preprocessed.csv")
 data_df.drop(data_df.columns[[0, 1]], axis=1, inplace=True)
 data_df.dropna(inplace=True)
-
-################
-# MLP Model #
-################
-mlp_model_path = "mlp_model.pkl"
-mlp_stats_path = "mlp_stats.csv"
 
 ################
 # Ridge Model #
