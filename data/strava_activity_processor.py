@@ -1,10 +1,10 @@
 import os
+import shutil
 
+import fitparse
 import pandas as pd
 import tqdm
-import shutil
 from tcxreader.tcxreader import TCXReader
-import fitparse
 
 
 def process_tcx_files(read_folder_path, write_folder_path):
@@ -32,7 +32,6 @@ def process_tcx_files(read_folder_path, write_folder_path):
     print("Done processing TCX files")
 
     return True
-
 
 
 def process_fit_files(read_folder_path, write_folder_path):
@@ -63,6 +62,7 @@ def process_fit_files(read_folder_path, write_folder_path):
     except Exception as e:
         print("Error processing FIT files:", e)
         return False
+
 
 def process(read_folder_path, write_folder_path):
     if os.path.exists(write_folder_path):

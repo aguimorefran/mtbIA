@@ -1,9 +1,11 @@
-import os
 import gzip
+import os
 import shutil
+
 import tqdm
 
 STRAVA_FOLDER = "strava_export"
+
 
 # Decompress al .gz files in the strava_export/decompressed folder
 # If decompressed folder does not exist, create it. If it exists, delete it and create it again recursively
