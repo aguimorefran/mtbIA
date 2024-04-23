@@ -26,6 +26,12 @@ columns_to_keep = [
 ]
 
 def save_df(df, destination_file):
+    """
+    Save a dataframe to a file
+    :param df: Dataframe to save
+    :param destination_file: Destination file path
+    :return: None
+    """
     folder_path = "/".join(destination_file.split("/")[:-1])
     if os.path.exists(folder_path):
         shutil.rmtree(folder_path)
@@ -34,6 +40,17 @@ def save_df(df, destination_file):
     print("Saved activity data to ", destination_file)
 
 def intervals_get_wellness(athlete_id, api_key, save_path, start_date="2020-01-01", end_date="today"):
+    """
+    Get wellness data from intervals.icu and save it to a csv file
+    :param athlete_id: Athlete ID from intervals.icu
+    :param api_key: API key from intervals.icu
+    :param save_path: Path to save the wellness data as a csv file
+    :param start_date: Start date of the wellness data
+    :param end_date: End date of the wellness data
+
+    :return: Wellness data as a pandas dataframe
+    :rtype: pd.DataFrame
+    """
     # Start date to datetime.date
     start_date = pd.to_datetime(start_date).date()
     # Datetime can be None, "today", or a date string
@@ -57,6 +74,13 @@ def intervals_get_wellness(athlete_id, api_key, save_path, start_date="2020-01-0
     return wellness_df
 
 def load_activity_files(activity_folder):
+    """
+    Load activity files from a folder
+    :param activity_folder: Folder containing activity files
+
+    :return: Dataframe containing all activity files
+    :rtype: pd.DataFrame
+    """
     print("Loading activity files from", activity_folder)
     activity_files = os.listdir(activity_folder)
     print("Found", len(activity_files), "activity files")
@@ -75,6 +99,13 @@ def load_activity_files(activity_folder):
 
 
 def preprocess_activity(activity_df):
+    """
+    Preprocess activity data
+    :param activity_df: Dataframe containing activity data
+
+    :return: Preprocessed activity data
+    :rtype: pd.DataFrame
+    """
     activity_df = (
         activity_df[columns_to_keep]
         .assign(timestamp=lambda df: pd.to_datetime(df["timestamp"]))

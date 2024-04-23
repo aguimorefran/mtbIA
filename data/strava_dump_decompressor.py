@@ -9,6 +9,10 @@ STRAVA_FOLDER = "strava_export"
 # If decompressed folder does not exist, create it. If it exists, delete it and create it again recursively
 
 def decompress_files():
+    """
+    Decompress all .gz files in the strava_export folder
+    :return: None
+    """
     gz_files = [f for f in os.listdir(STRAVA_FOLDER) if f.endswith('.gz')]
     print("Number of gz files:", len(gz_files))
 
