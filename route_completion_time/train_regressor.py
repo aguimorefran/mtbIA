@@ -13,7 +13,7 @@ from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.svm import SVR
 
-def save_model(model, model_path, stats_path, stat_dict, n_cols):
+def save_model(model, model_path, stats_path, stat_dict, col_names):
     # Create folder model_stats if it doesn't exist
     model_path = f"model_stats/{model_path}"
     stats_path = f"model_stats/{stats_path}"
@@ -27,7 +27,7 @@ def save_model(model, model_path, stats_path, stat_dict, n_cols):
 
     # Add timestamp and n_cols to the stats
     stat_dict['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    stat_dict['n_cols'] = n_cols
+    stat_dict['col_names'] = col_names
 
     # If stats file exists, append a new row. Otherwise, create a new file.
     if os.path.exists(stats_path):
@@ -56,47 +56,6 @@ def prepare_data(data_df, target_feature):
 
     return X, y, preprocessor
 
-
-def train_ridge_model(data_df, save_model_path, save_model_stats_path, target_feature):
-    print("-" * 50)
-    print("Training Ridge model")
-    X, y, preprocessor = prepare_data(data_df, target_feature)
-
-    ridge = Ridge()
-
-    param_grid = {
-        'ridge__alpha': [0.001, 0.1, 1, 10, 100],
-        'ridge__solver': ['auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga'],
-        'ridge__max_iter': [1000, 5000, 10000, 50000]
-    }
-
-    pipeline = Pipeline(steps=[('preprocessor', preprocessor), ('ridge', ridge)])
-
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    grid_search = GridSearchCV(pipeline, param_grid, cv=4, scoring='neg_mean_squared_error', return_train_score=True,
-                               verbose=1)
-    grid_search.fit(X_train, y_train)
-    grid_search.fit(X_train, y_train)
-
-    print("Finished training Ridge model")
-
-    final_model = grid_search.best_estimator_
-    predictions = final_model.predict(X_test)
-    mse = mean_squared_error(y_test, predictions)
-    mae = mean_absolute_error(y_test, predictions)
-    r2 = r2_score(y_test, predictions)
-
-    print("Best params: ", grid_search.best_params_)
-    print("MSE: ", mse)
-    print("MAE: ", mae)
-    print("R2: ", r2)
-
-    stat_dict = {
-        'mse': mse, 'mae': mae, 'r2': r2,
-        'best_params': grid_search.best_params_
-    }
-    save_model(final_model, save_model_path, save_model_stats_path, stat_dict, len(X.columns))
 
 
 def train_regressor(data_df, save_model_path, save_model_stats_path, params, regressor_object, regressor_name, target_feature):
@@ -132,7 +91,7 @@ def train_regressor(data_df, save_model_path, save_model_stats_path, params, reg
         'best_params': grid_search.best_params_
     }
 
-    save_model(final_model, save_model_path, save_model_stats_path, stat_dict, len(X.columns))
+    save_model(final_model, save_model_path, save_model_stats_path, stat_dict, data_df.columns)
 
 data_df = pd.read_csv("preprocessed.csv")
 data_df.drop(data_df.columns[[0, 1]], axis=1, inplace=True)
@@ -206,10 +165,10 @@ elastic_net_reg_name = "ElasticNet"
 elastic_net_model_path = "elastic_net_model.pkl"
 elastic_net_stats_path = "elastic_net_stats.csv"
 
-train_regressor(data_df, svr_lin_model_path, svr_lin_stats_path, svr_lin_reg_params, svr_lin_reg, svr_lin_reg_name)
-train_regressor(data_df, ridge_model_path, ridge_stats_path, ridge_reg_params, ridge_reg, ridge_reg_name)
-train_regressor(data_df, svr_rbf_model_path, svr_rbf_stats_path, svr_rbf_reg_params, svr_rbf_reg, svr_rbf_reg_name)
-train_regressor(data_df, lasso_model_path, lasso_stats_path, lasso_reg_params, lasso_reg, lasso_reg_name)
+target_feature = "elapsed_time"
+train_regressor(data_df, svr_lin_model_path, svr_lin_stats_path, svr_lin_reg_params, svr_lin_reg, svr_lin_reg_name, target_feature)
+train_regressor(data_df, ridge_model_path, ridge_stats_path, ridge_reg_params, ridge_reg, ridge_reg_name, target_feature)
+# train_regressor(data_df, svr_rbf_model_path, svr_rbf_stats_path, svr_rbf_reg_params, svr_rbf_reg, svr_rbf_reg_name, target_feature)
+train_regressor(data_df, lasso_model_path, lasso_stats_path, lasso_reg_params, lasso_reg, lasso_reg_name, target_feature)
 train_regressor(data_df, elastic_net_model_path, elastic_net_stats_path, elastic_net_reg_params, elastic_net_reg,
-                elastic_net_reg_name)
-# train_MLP(data_df, mlp_model_path, mlp_stats_path)
+                elastic_net_reg_name, target_feature)

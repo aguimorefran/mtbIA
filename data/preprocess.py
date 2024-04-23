@@ -65,11 +65,26 @@ def intervals_get_wellness(athlete_id, api_key, save_path, start_date="2020-01-0
     wellness = icu.wellness(start_date, end_date)
 
     wellness_df = pd.DataFrame(wellness)
-    wellness_df['eftp'] = wellness_df['sportInfo'].apply(lambda x: x[0]['eftp'] if len(x) > 0 else None)
-
-    wellness_df = wellness_df[["id", "eftp", "ctl", "atl"]]
     wellness_df["date"] = pd.to_datetime(wellness_df["id"])
     wellness_df = wellness_df.drop(columns=["id"])
+    wellness_df = wellness_df.sort_values(by="date")
+    wellness_df['eftp'] = wellness_df['sportInfo'].apply(lambda x: x[0]['eftp'] if len(x) > 0 else None)
+    wellness_df = wellness_df.drop(columns=["sportInfo"])
+
+    wellness_df = wellness_df.dropna(axis=1, how="all")
+
+    last_weight = None
+    last_eftp = None
+    for i in range(len(wellness_df) - 1, -1, -1):
+        if pd.isnull(wellness_df["weight"][i]):
+            wellness_df.loc[i, "weight"] = last_weight
+        else:
+            last_weight = wellness_df["weight"][i]
+
+        if pd.isnull(wellness_df["eftp"][i]):
+            wellness_df.loc[i, "eftp"] = last_eftp
+        else:
+            last_eftp = wellness_df["eftp"][i]
 
     wellness_df.to_csv(save_path, index=False)
     print("Saved wellness data to ", save_path)

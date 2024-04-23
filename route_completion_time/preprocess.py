@@ -26,7 +26,8 @@ TIME_OF_DAY_LABELS = ["night", "morning", "afternoon", "evening"]
 
 WELLNESS_COLS = [
     "atl",
-    "ctl"
+    "ctl",
+    "wattkilo"
 ]
 
 
@@ -87,10 +88,11 @@ def aggregate_waypoints(data):
     # - season = most common season
     # - time_of_day = most common time_of_day
 
+
+    data['date'] = data['timestamp'].dt.date.astype(str)
+
     wellness_data = pd.read_csv(wellness_file)
-    data['date'] = data['timestamp'].dt.date
     wellness_data = wellness_data[WELLNESS_COLS + ['date']]
-    data['date'] = data['date'].astype(str)
     wellness_data['date'] = wellness_data['date'].astype(str)
 
     data = pd.merge(data, wellness_data, on='date', how='left')
@@ -103,7 +105,9 @@ def aggregate_waypoints(data):
         season=("season", lambda x: x.value_counts().idxmax()),
         time_of_day=("time_of_day", lambda x: x.value_counts().idxmax()),
         atl=("atl", "first"),
-        ctl=("ctl", "first")
+        ctl=("ctl", "first"),
+        wattkilo=("wattkilo", "first")
+
     ).reset_index()
 
     # Calculate the percentage of each slope color in the activity per total distance
