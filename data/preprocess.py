@@ -2,14 +2,15 @@ import os
 import pandas as pd
 import tqdm
 from datetime import datetime
+import shutil
 
 from dotenv import load_dotenv
 load_dotenv(dotenv_path="../env.py")
 import intervals
 
 activity_folder = "../data/processed_activities"
-processed_dest_file = "../data/processed_activities.csv"
-wellness_dest_file = "../data/wellness.csv"
+processed_dest_file = "../data/train/processed_activities.csv"
+wellness_dest_file = "../data/train/wellness.csv"
 columns_to_keep = [
     "id",
     "position_lat",
@@ -24,7 +25,15 @@ columns_to_keep = [
     "grade"
 ]
 
-def intervals_get_wellness(athlete_id, api_key, start_date="2020-01-01", end_date="today"):
+def save_df(df, destination_file):
+    folder_path = "/".join(destination_file.split("/")[:-1])
+    if os.path.exists(folder_path):
+        shutil.rmtree(folder_path)
+    os.makedirs(folder_path, exist_ok=True)
+    df.to_csv(destination_file, index=False)
+    print("Saved activity data to ", destination_file)
+
+def intervals_get_wellness(athlete_id, api_key, save_path, start_date="2020-01-01", end_date="today"):
     # Start date to datetime.date
     start_date = pd.to_datetime(start_date).date()
     # Datetime can be None, "today", or a date string
@@ -42,8 +51,8 @@ def intervals_get_wellness(athlete_id, api_key, start_date="2020-01-01", end_dat
     wellness_df["date"] = pd.to_datetime(wellness_df["id"])
     wellness_df = wellness_df.drop(columns=["id"])
 
-    wellness_df.to_csv("../data/wellness.csv", index=False)
-    print("Saved wellness data to ../data/wellness.csv")
+    wellness_df.to_csv(save_path, index=False)
+    print("Saved wellness data to ", save_path)
 
     return wellness_df
 
@@ -74,16 +83,10 @@ def preprocess_activity(activity_df):
 
     return activity_df
 
-
-def save_activity(activity_df, destination_file):
-    activity_df.to_csv(destination_file, index=False)
-    print("Saved activity data to ", destination_file)
-
-
 def main():
     activity_df = load_activity_files(activity_folder)
     activity_df = preprocess_activity(activity_df)
-    save_activity(activity_df, processed_dest_file)
+    save_df(activity_df, processed_dest_file)
     intervals_get_wellness(ATHLETE_ID, API_KEY, wellness_dest_file)
 
 
