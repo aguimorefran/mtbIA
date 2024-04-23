@@ -24,6 +24,11 @@ YEAR_SEASONS = {1: "winter", 2: "winter", 3: "spring", 4: "spring", 5: "spring",
 TIME_OF_DAY_CUTS = [0, 6, 12, 18, 24]
 TIME_OF_DAY_LABELS = ["night", "morning", "afternoon", "evening"]
 
+WELLNESS_COLS = [
+    "atl",
+    "ctl"
+]
+
 
 def process_activity_by_id(data, id):
     """
@@ -37,7 +42,6 @@ def process_activity_by_id(data, id):
     df = data[data["id"] == id][COLS_TO_KEEP].copy()
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     df.sort_values(by=["timestamp"], inplace=True)
-    # Calculate slope with safe division
     df["altitude"] = df["altitude"].fillna(0)
     df["slope"] = np.where(df["distance"].diff() != 0, df["altitude"].diff() / df["distance"].diff() * 100, 0)
     df["slope"] = df["slope"].fillna(0)
@@ -66,10 +70,6 @@ def process_all_activities(data):
     return df_agg
 
 
-def process_wellness(data):
-
-    return data
-
 
 def aggregate_waypoints(data):
     """
@@ -87,12 +87,23 @@ def aggregate_waypoints(data):
     # - season = most common season
     # - time_of_day = most common time_of_day
 
+    wellness_data = pd.read_csv(wellness_file)
+    data['date'] = data['timestamp'].dt.date
+    wellness_data = wellness_data[WELLNESS_COLS + ['date']]
+    data['date'] = data['date'].astype(str)
+    wellness_data['date'] = wellness_data['date'].astype(str)
+
+    data = pd.merge(data, wellness_data, on='date', how='left')
+
+
     df_agg = data.groupby("id").agg(
         distance=("distance", "max"),
         ascent_meters=("altitude_diff", lambda x: x[x > 0].sum()),
         elapsed_time=("elapsed_time", "max"),
         season=("season", lambda x: x.value_counts().idxmax()),
         time_of_day=("time_of_day", lambda x: x.value_counts().idxmax()),
+        atl=("atl", "first"),
+        ctl=("ctl", "first")
     ).reset_index()
 
     # Calculate the percentage of each slope color in the activity per total distance

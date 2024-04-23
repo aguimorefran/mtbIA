@@ -1,2 +1,4 @@
-mse,mae,r2,best_params
-868619.2607331063,713.5204636532629,0.32474836144003394,"{'regressor__C': 100, 'regressor__epsilon': 0.1, 'regressor__gamma': 'auto'}"
+mse,mae,r2,best_params,timestamp,n_cols
+868619.2607331063,713.5204636532629,0.3247483614400339,"{'regressor__C': 100, 'regressor__epsilon': 0.1, 'regressor__gamma': 'auto'}",2024-04-23 12:09:45,10
+868619.2607331063,713.5204636532629,0.3247483614400339,"{'regressor__C': 100, 'regressor__epsilon': 0.1, 'regressor__gamma': 'auto'}",2024-04-23 12:11:42,10
+948941.0397112274,743.9961326035892,0.2623074102443952,"{'regressor__C': 100, 'regressor__epsilon': 1, 'regressor__gamma': 'auto'}",2024-04-23 12:26:16,12
