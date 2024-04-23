@@ -26,6 +26,14 @@ TIME_OF_DAY_LABELS = ["night", "morning", "afternoon", "evening"]
 
 
 def process_activity_by_id(data, id):
+    """
+    Process an activity by id
+    :param data: DataFrame with the activities
+    :param id: id of the activity to process
+    :return: DataFrame with the processed activity
+
+    :rtype: pd.DataFrame
+    """
     df = data[data["id"] == id][COLS_TO_KEEP].copy()
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     df.sort_values(by=["timestamp"], inplace=True)
@@ -43,6 +51,13 @@ def process_activity_by_id(data, id):
 
 
 def process_all_activities(data):
+    """
+    Process all activities. It applies the function process_activity_by_id to all the activities
+    :param data: DataFrame with the activities
+    :return: DataFrame with all the processed activities
+
+    :rtype: pd.DataFrame
+    """
     print("Processing all activities")
     id_list = data["id"].unique()
     processed_activities = [process_activity_by_id(data, id) for id in tqdm(id_list)]
@@ -52,10 +67,18 @@ def process_all_activities(data):
 
 
 def process_wellness(data):
+
     return data
 
 
 def aggregate_waypoints(data):
+    """
+    Aggregates all the waypoints of an activity to a single row per activity
+    :param data: DataFrame with the activities
+    :return: DataFrame with the aggregated activities
+
+    :rtype: pd.DataFrame
+    """
     print("Aggregating waypoints")
     # Aggregates all the waypoints of an activity
     # - distance = max distance
