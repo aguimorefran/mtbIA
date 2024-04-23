@@ -1,2 +1,2 @@
 mse,mae,r2,best_params
-231436.9224514783,379.3046093185172,0.8200843935043078,"{'regressor__alpha': 1, 'regressor__max_iter': 10000, 'regressor__solver': 'saga'}"
+231403.98201096567,379.2857178001534,0.8201100009107247,"{'regressor__alpha': 1, 'regressor__max_iter': 10000, 'regressor__solver': 'saga'}"
