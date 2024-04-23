@@ -81,13 +81,6 @@ def aggregate_waypoints(data):
     :rtype: pd.DataFrame
     """
     print("Aggregating waypoints")
-    # Aggregates all the waypoints of an activity
-    # - distance = max distance
-    # - ascent_meters = sum of positive altitude_diff
-    # - elapsed_time = max elapsed_time
-    # - season = most common season
-    # - time_of_day = most common time_of_day
-
 
     data['date'] = data['timestamp'].dt.date.astype(str)
 

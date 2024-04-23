@@ -145,6 +145,7 @@ def make_prediction(model_pkl_path, route_data, model_name):
 #FITNESS = CTL
 #FATIGUE = ATL
 
+n_models = 1
 SEASON = "spring"
 TIME_OF_DAY = "morning"
 WATTS = 220
@@ -161,7 +162,7 @@ print(f"Watt per kilo: {WATTKILO}")
 gpx_folder = "../data/gpx"
 preprocessor_pkl_path = "preprocessor.pkl"
 
-available_models = search_models(n_models=2)
+available_models = search_models(n_models=n_models)
 
 for file in os.listdir(gpx_folder):
     if file.endswith(".gpx"):
