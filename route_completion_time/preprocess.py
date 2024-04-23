@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-processed_activities_file = "../data/ready_data.csv"
+processed_activities_file = "../data/train/processed_activities.csv"
+wellness_file = "../data/train/wellness.csv"
 df_activity = pd.read_csv(processed_activities_file)
 
 COLS_TO_KEEP = [
@@ -42,14 +43,20 @@ def process_activity_by_id(data, id):
 
 
 def process_all_activities(data):
+    print("Processing all activities")
     id_list = data["id"].unique()
     processed_activities = [process_activity_by_id(data, id) for id in tqdm(id_list)]
     df_agg = pd.concat(processed_activities)
 
     return df_agg
 
+def process_wellness(data):
+
+    return data
+
 
 def aggregate_waypoints(data):
+    print("Aggregating waypoints")
     # Aggregates all the waypoints of an activity
     # - distance = max distance
     # - ascent_meters = sum of positive altitude_diff

@@ -9,6 +9,13 @@ from haversine import Unit
 from preprocess import SLOPE_CUTS, SLOPE_LABELS
 
 def ingest_gpx(gpx_path):
+    """
+    Ingest a GPX file and return a DataFrame with the relevant columns
+    :param gpx_path: str, path to the GPX file
+    :return: pd.DataFrame
+
+    :rtype: pd.DataFrame
+    """
     gpx_file = open(gpx_path, 'r')
     gpx = gpxpy.parse(gpx_file)
 
@@ -27,6 +34,15 @@ def ingest_gpx(gpx_path):
 
 
 def process_gpx(data, season, time_of_day):
+    """
+    Process the GPX data to calculate the distance, slope, and altitude difference
+    :param data: pd.DataFrame, the GPX data
+    :param season: str, the season of the activity
+    :param time_of_day: str, the time of day of the activity
+    :return: pd.DataFrame
+
+    :rtype: pd.DataFrame
+    """
     for i in range(1, len(data)):
         data.loc[i, "distance"] = hs.haversine((data.loc[i - 1, "position_lat"], data.loc[i - 1, "position_long"]),
                                                (data.loc[i, "position_lat"], data.loc[i, "position_long"]),
@@ -60,6 +76,15 @@ def process_gpx(data, season, time_of_day):
 
 
 def search_models(models_folder="model_stats", n_models=2, verbose=False):
+    """
+    Search the models in the models_folder and return the top n_models by R2
+    :param models_folder: str, the folder where the models are stored
+    :param n_models: int, the number of models to return
+    :param verbose: bool, whether to print the models
+    :return: pd.DataFrame
+
+    :rtype: pd.DataFrame
+    """
     models = {}
     for file in os.listdir(models_folder):
         if file.endswith("_model.pkl"):
@@ -90,12 +115,16 @@ def search_models(models_folder="model_stats", n_models=2, verbose=False):
     return top_models
 
 
-def preprocess_data(data_df, preprocessor_pkl_path="preprocessor.pkl"):
-    preprocessor = pickle.load(open(preprocessor_pkl_path, 'rb'))
-    return preprocessor.transform(data_df)
-
-
 def make_prediction(model_pkl_path, route_data, model_name):
+    """
+    Make a prediction with the model
+    :param model_pkl_path: str, path to the model pkl file
+    :param route_data: pd.DataFrame, the data of the route
+    :param model_name: str, the name of the model
+    :return: None
+
+    :rtype: None
+    """
     # Load model
     model = pickle.load(open(model_pkl_path, 'rb'))
     pred_segs = model.predict(route_data)[0]
