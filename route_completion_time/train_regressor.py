@@ -2,11 +2,13 @@ import os
 import pickle
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
+from hyperopt import hp, STATUS_OK, Trials, fmin, tpe
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import Ridge, Lasso, ElasticNet
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, cross_val_score
 from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import Pipeline, make_pipeline
@@ -93,9 +95,91 @@ def train_regressor(data_df, save_model_path, save_model_stats_path, params, reg
 
     save_model(final_model, save_model_path, save_model_stats_path, stat_dict, data_df.columns)
 
+
+def train_MLP(data_df, save_model_path, save_model_stats_path, regressor_name, target_feature):
+    print("-" * 50)
+    print(f"Training {regressor_name} model")
+
+    X, y, preprocessor = prepare_data(data_df, target_feature)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    model = MLPRegressor()
+    pipeline = make_pipeline(preprocessor, model)
+
+    X_processed = preprocessor.fit_transform(X_train)
+    print("Number of input features: ", X_processed.shape[1])
+
+
+    space = {
+        'hidden_layer_sizes':
+            hp.choice('hidden_layer_sizes', [
+                32, 50,
+                (20, 20),
+                (50, 50),
+                (50, 50, 10),
+            ]),
+        'activation': hp.choice('activation', ['relu', 'tanh']),
+        'learning_rate_init': hp.loguniform(
+            'learning_rate_init', np.log(1e-5), np.log(1e-2)),
+        'max_iter': 50000,
+        'early_stopping': True,
+        'solver': ['adam', 'lbfgs']
+    }
+
+    def objective(params):
+        print(params)
+        pipeline.set_params(mlpregressor__hidden_layer_sizes=params['hidden_layer_sizes'],
+                            mlpregressor__activation=params['activation'],
+                            mlpregressor__learning_rate_init=params['learning_rate_init'],
+                            mlpregressor__early_stopping=params['early_stopping'],
+                            mlpregressor__solver=params['solver'],
+                            mlpregressor__max_iter=params['max_iter'])
+        score = -cross_val_score(pipeline, X_train, y_train, cv=3, scoring='neg_mean_squared_error').mean()
+        return {'loss': score, 'status': STATUS_OK}
+
+    trials = Trials()
+    best = fmin(fn=objective,
+                space=space,
+                algo=tpe.suggest,
+                max_evals=50,
+                trials=trials)
+
+    best_params = {
+        'hidden_layer_sizes': space['hidden_layer_sizes'][best['hidden_layer_sizes']],
+        'activation': space['activation'][best['activation']],
+        'learning_rate_init': best['learning_rate_init'],
+        'early_stopping': space['early_stopping'],
+        'solver': space['solver'],
+        'max_iter': space['max_iter']
+    }
+
+    print("Best params: ", best_params)
+
+    pipeline.set_params(mlpregressor__hidden_layer_sizes=best_params['hidden_layer_sizes'],
+                        mlpregressor__activation=best_params['activation'],
+                        mlpregressor__learning_rate_init=best_params['learning_rate_init'],
+                        mlpregressor__early_stopping=best_params['early_stopping'],
+                        mlpregressor__solver=best_params['solver'],
+                        mlpregressor__max_iter=best_params['max_iter'])
+
+    pipeline.fit(X_train, y_train)
+    predictions = pipeline.predict(X_test)
+    mse = mean_squared_error(y_test, predictions)
+    mae = mean_absolute_error(y_test, predictions)
+    r2 = r2_score(y_test, predictions)
+
+    print("MSE: ", mse)
+    print("MAE: ", mae)
+    print("R2: ", r2)
+
+
 data_df = pd.read_csv("preprocessed.csv")
 data_df.drop(data_df.columns[[0, 1]], axis=1, inplace=True)
 data_df.dropna(inplace=True)
+target_feature = "elapsed_time"
+
+
+train_MLP(data_df, "mlp_model.pkl", "mlp_stats.csv", "MLP", target_feature)
 
 ################
 # Ridge Model #
@@ -165,10 +249,9 @@ elastic_net_reg_name = "ElasticNet"
 elastic_net_model_path = "elastic_net_model.pkl"
 elastic_net_stats_path = "elastic_net_stats.csv"
 
-target_feature = "elapsed_time"
-train_regressor(data_df, svr_lin_model_path, svr_lin_stats_path, svr_lin_reg_params, svr_lin_reg, svr_lin_reg_name, target_feature)
-train_regressor(data_df, ridge_model_path, ridge_stats_path, ridge_reg_params, ridge_reg, ridge_reg_name, target_feature)
-# train_regressor(data_df, svr_rbf_model_path, svr_rbf_stats_path, svr_rbf_reg_params, svr_rbf_reg, svr_rbf_reg_name, target_feature)
-train_regressor(data_df, lasso_model_path, lasso_stats_path, lasso_reg_params, lasso_reg, lasso_reg_name, target_feature)
-train_regressor(data_df, elastic_net_model_path, elastic_net_stats_path, elastic_net_reg_params, elastic_net_reg,
-                elastic_net_reg_name, target_feature)
+# train_regressor(data_df, svr_lin_model_path, svr_lin_stats_path, svr_lin_reg_params, svr_lin_reg, svr_lin_reg_name, target_feature)
+# train_regressor(data_df, ridge_model_path, ridge_stats_path, ridge_reg_params, ridge_reg, ridge_reg_name, target_feature)
+# # train_regressor(data_df, svr_rbf_model_path, svr_rbf_stats_path, svr_rbf_reg_params, svr_rbf_reg, svr_rbf_reg_name, target_feature)
+# train_regressor(data_df, lasso_model_path, lasso_stats_path, lasso_reg_params, lasso_reg, lasso_reg_name, target_feature)
+# train_regressor(data_df, elastic_net_model_path, elastic_net_stats_path, elastic_net_reg_params, elastic_net_reg,
+#                 elastic_net_reg_name, target_feature)

@@ -1,1 +1,2 @@
 - Clustering
+- Usar temp del gps, o la de la estación más cercana
