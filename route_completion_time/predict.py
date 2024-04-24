@@ -18,7 +18,7 @@ def ingest_gpx(gpx_path):
     :rtype: pd.DataFrame
     """
     gpx_file = open(gpx_path, 'r')
-    gpx = gpxpy.parse(gpx_file)
+    gpx = gpxpy.parse(gpx_file, version='1.1')
 
     waypoints = []
     for track in gpx.tracks:
@@ -171,6 +171,11 @@ for file in os.listdir(gpx_folder):
         print("-" * 50)
         print(f"Processing {gpx_path}")
     route_data = process_gpx(df, SEASON, TIME_OF_DAY, WATTKILO, ATL, CTL)
+    distance_km = route_data["distance"].values[0]/1000
+    ascent_meters = route_data["ascent_meters"].values[0]
+    print(f"Distance: {distance_km:.2f} km")
+    print(f"Ascent: {ascent_meters:.2f} meters")
+
 
     for idx, model_info in available_models.iterrows():
         model_pkl_path = os.path.join("model_stats", model_info["model_file"])
