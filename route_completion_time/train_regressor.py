@@ -109,21 +109,23 @@ def train_MLP(data_df, save_model_path, save_model_stats_path, regressor_name, t
     X_processed = preprocessor.fit_transform(X_train)
     print("Number of input features: ", X_processed.shape[1])
 
+    def layer(n_neuron, n_layer, last):
+        return tuple([n_neuron] * n_layer + [last])
 
     space = {
-        'hidden_layer_sizes':
-            hp.choice('hidden_layer_sizes', [
-                32, 50,
-                (20, 20),
-                (50, 50),
-                (50, 50, 10),
-            ]),
+        'hidden_layer_sizes': hp.choice(
+            'hidden_layer_sizes', [
+                layer(
+                    n_neuron,
+                    n_layer,
+                    10)
+                for n_neuron in range(10, 100, 10) for n_layer in range(1, 21)]),
         'activation': hp.choice('activation', ['relu', 'tanh']),
         'learning_rate_init': hp.loguniform(
             'learning_rate_init', np.log(1e-5), np.log(1e-2)),
         'max_iter': 50000,
         'early_stopping': True,
-        'solver': ['adam', 'lbfgs']
+        'solver': hp.choice('solver', ['adam', 'lbfgs'])
     }
 
     def objective(params):
@@ -144,33 +146,7 @@ def train_MLP(data_df, save_model_path, save_model_stats_path, regressor_name, t
                 max_evals=50,
                 trials=trials)
 
-    best_params = {
-        'hidden_layer_sizes': space['hidden_layer_sizes'][best['hidden_layer_sizes']],
-        'activation': space['activation'][best['activation']],
-        'learning_rate_init': best['learning_rate_init'],
-        'early_stopping': space['early_stopping'],
-        'solver': space['solver'],
-        'max_iter': space['max_iter']
-    }
-
-    print("Best params: ", best_params)
-
-    pipeline.set_params(mlpregressor__hidden_layer_sizes=best_params['hidden_layer_sizes'],
-                        mlpregressor__activation=best_params['activation'],
-                        mlpregressor__learning_rate_init=best_params['learning_rate_init'],
-                        mlpregressor__early_stopping=best_params['early_stopping'],
-                        mlpregressor__solver=best_params['solver'],
-                        mlpregressor__max_iter=best_params['max_iter'])
-
-    pipeline.fit(X_train, y_train)
-    predictions = pipeline.predict(X_test)
-    mse = mean_squared_error(y_test, predictions)
-    mae = mean_absolute_error(y_test, predictions)
-    r2 = r2_score(y_test, predictions)
-
-    print("MSE: ", mse)
-    print("MAE: ", mae)
-    print("R2: ", r2)
+    print("Best parameters: ", best)
 
 
 data_df = pd.read_csv("preprocessed.csv")
