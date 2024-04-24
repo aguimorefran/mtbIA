@@ -71,7 +71,6 @@ def process_all_activities(data):
     return df_agg
 
 
-
 def aggregate_waypoints(data):
     """
     Aggregates all the waypoints of an activity to a single row per activity
@@ -89,7 +88,6 @@ def aggregate_waypoints(data):
     wellness_data['date'] = wellness_data['date'].astype(str)
 
     data = pd.merge(data, wellness_data, on='date', how='left')
-
 
     df_agg = data.groupby("id").agg(
         distance=("distance", "max"),

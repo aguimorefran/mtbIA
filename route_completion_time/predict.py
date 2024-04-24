@@ -122,6 +122,9 @@ def search_models(models_folder="model_stats", n_models=2, verbose=False):
     return top_models
 
 
+def plot_prediction(gpx_data, pred_segs):
+
+
 def make_prediction(model_pkl_path, route_data, model_name):
     """
     Make a prediction with the model
@@ -142,8 +145,8 @@ def make_prediction(model_pkl_path, route_data, model_name):
 
 
 ### MAIN SCRIPT ###
-#FITNESS = CTL
-#FATIGUE = ATL
+# FITNESS = CTL
+# FATIGUE = ATL
 
 n_models = 1
 SEASON = "spring"
@@ -171,11 +174,10 @@ for file in os.listdir(gpx_folder):
         print("-" * 50)
         print(f"Processing {gpx_path}")
     route_data = process_gpx(df, SEASON, TIME_OF_DAY, WATTKILO, ATL, CTL)
-    distance_km = route_data["distance"].values[0]/1000
+    distance_km = route_data["distance"].values[0] / 1000
     ascent_meters = route_data["ascent_meters"].values[0]
     print(f"Distance: {distance_km:.2f} km")
     print(f"Ascent: {ascent_meters:.2f} meters")
-
 
     for idx, model_info in available_models.iterrows():
         model_pkl_path = os.path.join("model_stats", model_info["model_file"])
