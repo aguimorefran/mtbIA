@@ -109,28 +109,27 @@ def train_MLP(data_df, save_model_path, save_model_stats_path, regressor_name, t
     X_processed = preprocessor.fit_transform(X_train)
     print("Number of input features: ", X_processed.shape[1])
 
-    def layer(n_neuron, n_layer, last):
-        return tuple([n_neuron] * n_layer + [last])
+    n_neurons = [30, 40, 50, 60, 70]
+    n_layers = [15, 20, 25, 30]
 
     space = {
-        'hidden_layer_sizes': hp.choice(
-            'hidden_layer_sizes', [
-                layer(
-                    n_neuron,
-                    n_layer,
-                    10)
-                for n_neuron in range(10, 100, 10) for n_layer in range(1, 21)]),
-        'activation': hp.choice('activation', ['relu', 'tanh']),
-        'learning_rate_init': hp.loguniform(
-            'learning_rate_init', np.log(1e-5), np.log(1e-2)),
+        'n_neurons': hp.choice('n_neurons', n_neurons),
+        'n_layers': hp.choice('n_layers', n_layers),
+        'activation': hp.choice('activation', ['relu', 'tanh', 'logistic']),
+        'learning_rate_init': hp.uniform('learning_rate_init', 0.0001, 0.1),
         'max_iter': 50000,
         'early_stopping': True,
-        'solver': hp.choice('solver', ['adam', 'lbfgs'])
+        'solver': hp.choice('solver', ['lbfgs', 'adam']),
+        'learning_rate': hp.choice('learning_rate', ['constant', 'adaptive'])
     }
 
+    def create_layers(n_neurons, n_layers):
+        return tuple([n_neurons] * n_layers)
+
     def objective(params):
-        print(params)
-        pipeline.set_params(mlpregressor__hidden_layer_sizes=params['hidden_layer_sizes'],
+        layers = create_layers(params['n_neurons'], params['n_layers'])
+        print(f"Configuring model with {layers} layers")
+        pipeline.set_params(mlpregressor__hidden_layer_sizes=layers,
                             mlpregressor__activation=params['activation'],
                             mlpregressor__learning_rate_init=params['learning_rate_init'],
                             mlpregressor__early_stopping=params['early_stopping'],
@@ -148,6 +147,37 @@ def train_MLP(data_df, save_model_path, save_model_stats_path, regressor_name, t
 
     print("Best parameters: ", best)
 
+    best_params = {
+        'n_neurons': n_neurons[best['n_neurons']],
+        'n_layers': n_layers[best['n_layers']],
+        'activation': ['relu', 'tanh'][best['activation']],
+        'learning_rate_init': 0.001,
+        'max_iter': 50000,
+        'early_stopping': True,
+        'solver': 'lbfgs',
+        'learning_rate': ['constant', 'adaptive'][best['learning_rate']]
+    }
+
+    print("Best parameters with actual values: ", best_params)
+
+    pipeline.set_params(mlpregressor__hidden_layer_sizes=(best_params['n_neurons'],) * best_params['n_layers'],
+                        mlpregressor__activation=best_params['activation'],
+                        mlpregressor__learning_rate_init=best_params['learning_rate_init'],
+                        mlpregressor__early_stopping=best_params['early_stopping'],
+                        mlpregressor__solver=best_params['solver'],
+                        mlpregressor__learning_rate=best_params['learning_rate'],
+                        mlpregressor__max_iter=best_params['max_iter'])
+
+    pipeline.fit(X_train, y_train)
+
+    predictions = pipeline.predict(X_test)
+    mse = mean_squared_error(y_test, predictions)
+    mae = mean_absolute_error(y_test, predictions)
+    r2 = r2_score(y_test, predictions)
+
+    print("MSE: ", mse)
+    print("MAE: ", mae)
+    print("R2: ", r2)
 
 data_df = pd.read_csv("preprocessed.csv")
 data_df.drop(data_df.columns[[0, 1]], axis=1, inplace=True)
@@ -155,7 +185,7 @@ data_df.dropna(inplace=True)
 target_feature = "elapsed_time"
 
 
-train_MLP(data_df, "mlp_model.pkl", "mlp_stats.csv", "MLP", target_feature)
+# train_MLP(data_df, "mlp_model.pkl", "mlp_stats.csv", "MLP", target_feature)
 
 ################
 # Ridge Model #
