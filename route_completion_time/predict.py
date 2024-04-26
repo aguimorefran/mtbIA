@@ -6,6 +6,7 @@ import haversine as hs
 import pandas as pd
 from haversine import Unit
 from matplotlib import pyplot as plt
+import xyzservices as xzy
 
 from preprocess import SLOPE_CUTS, SLOPE_LABELS
 
@@ -137,24 +138,61 @@ def plot_prediction(gpx_data, pred_time_hours, pred_time_minutes, route_name, di
     :rtype: None
     """
     gpx_data = gpx_data.copy()
+    pred_time_hours = int(pred_time_hours)
+    pred_time_minutes = int(pred_time_minutes)
+    formatted_time = f"{pred_time_hours}h {pred_time_minutes}m"
 
     gpx_data['slope_color'] = gpx_data['slope_color'].fillna("downhill").map(lambda x: "gray" if x == "downhill" else x)
 
     fig, ax = plt.subplots(figsize=(10, 10))
 
+    # Plot GPX data with colored slope
     for i in range(len(gpx_data) - 1):
         ax.plot([gpx_data['position_long'][i], gpx_data['position_long'][i + 1]],
                 [gpx_data['position_lat'][i], gpx_data['position_lat'][i + 1]],
                 color=gpx_data['slope_color'].iloc[i], linewidth=2)
 
-    # Add start point to the plot as a blue
-    ax.plot(gpx_data['position_long'].iloc[0], gpx_data['position_lat'].iloc[0], 'bo', label='Start')
+    # Add start point to the plot as a blue star
+    ax.plot(gpx_data['position_long'].iloc[0], gpx_data['position_lat'].iloc[0], '*', color='blue', label='Start')
 
-    plt.title("Route: " + route_name + f"\nDistance: {distance:.2f} km, Ascent: {ascent:.2f} meters" + "\nPredicted time: " + str(
-        pred_time_hours) + " hours and " + str(pred_time_minutes) + " minutes")
+    # Add background map using contextily
+    ctx.add_basemap(ax, crs="EPSG:4326",
+                    source=xzy.providers.OpenStreetMap.Mapnik)
 
+    # Remove axis labels and ticks
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    # Set title
+    plt.title("Route: " + route_name + f"\nDistance: {distance:.2f} km, Ascent: {ascent:.2f} meters" + "\nPredicted time: " + str(formatted_time))
+
+    # Save plot
     plt.savefig(f"model_stats/{route_name}_prediction.png", bbox_inches='tight')
 
+
+def predict_10km_time(watt_kilo, atl, ctl, season, time_of_day, gpx_path, model_pkl_path, model_name):
+    # Receive the entire GPX file
+    # Traverse the GPX file and calculate the cumsum distance
+    # Every 10km calculate the time with the model for the traveled distance
+    # Save in a new df the coords, distance and predicted time
+
+    predictions = pd.DataFrame(columns=["latitude", "longitude", "distance", "predicted_time"])
+    gpx_data = ingest_gpx(gpx_path)
+    distance = 0
+    for i in range(1, len(gpx_data)):
+        distance += hs.haversine((gpx_data.loc[i - 1, "position_lat"], gpx_data.loc[i - 1, "position_long"]),
+                                 (gpx_data.loc[i, "position_lat"], gpx_data.loc[i, "position_long"]),
+                                 unit=Unit.METERS)
+        if distance >= 10000:
+            route_data = process_gpx(gpx_data[:i], season, time_of_day, watt_kilo, atl, ctl)
+            hours, minutes = make_prediction(model_pkl_path, route_data, model_name)
+            predictions = predictions.append({"latitude": gpx_data.loc[i, "position_lat"],
+                                              "longitude": gpx_data.loc[i, "position_long"],
+                                              "distance": distance,
+                                              "predicted_time": hours * 3600 + minutes * 60}, ignore_index=True)
+            distance = 0
+
+    return predictions
 
 
 def make_prediction(model_pkl_path, route_data, model_name):
@@ -174,6 +212,13 @@ def make_prediction(model_pkl_path, route_data, model_name):
     minutes = (pred_segs % 3600) // 60
 
     print(f"Predicted time for {model_name}: {int(hours)} hours and {int(minutes)} minutes")
+
+    ### 10kms prediction
+    predictions_10km = predict_10km_time(route_data["wattkilo"].values[0], route_data["atl"].values[0],
+                                         route_data["ctl"].values[0], route_data["season"].values[0],
+                                         route_data["time_of_day"].values[0], gpx_path, model_pkl_path, model_name)
+
+    print(predictions_10km)
 
     return hours, minutes
 
@@ -218,9 +263,10 @@ for file in os.listdir(gpx_folder):
             model_pkl_path = os.path.join("model_stats", model_info["model_file"])
             try:
                 hours, minutes = make_prediction(model_pkl_path, route_data, model_info["model_name"])
-                plot_prediction(df[['position_lat', 'position_long', 'slope_color']], hours, minutes, file, distance_km,
-                                ascent_meters)
 
             except Exception as e:
                 print(f"Error predicting with model {model_info['model_name']}: {e}")
                 continue
+
+            # plot_prediction(df, hours, minutes, file, distance_km,
+            #                 ascent_meters)

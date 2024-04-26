@@ -1,4 +1,4 @@
 - Clustering
 - Usar temp del gps, o la de la estación más cercana
 - Coger datos de intervals icu
-- Plotear mapa bonito con las stats
+- Plotear cada 10km el tiempo
