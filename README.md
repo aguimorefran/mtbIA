@@ -82,8 +82,6 @@ To make a prediction, run the `predict.py` script with the path to the GPX file 
 
 ## Plots
 
-## Plots
-
 The `predict.py` script generates a plot for each route prediction. These plots provide a visual representation of the route, with the slope of the route color-coded. The start point, the end point, and the quarter points of the route are also plotted on the map, and annotated with the predicted completion times.
 
 The plots are saved in the `model_stats` directory, with the name of the route and the suffix `_prediction.png`.
