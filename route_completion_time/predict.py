@@ -1,6 +1,7 @@
 import os
 import pickle
 
+import contextily as ctx
 import gpxpy
 import haversine as hs
 import pandas as pd
@@ -44,6 +45,11 @@ def process_gpx(data, season, time_of_day, watt_kilo, atl, ctl):
 
     :rtype: pd.DataFrame
     """
+
+    # Reset idx
+    data = data.copy()
+    data.reset_index(drop=True, inplace=True)
+
     for i in range(1, len(data)):
         data.loc[i, "distance"] = hs.haversine((data.loc[i - 1, "position_lat"], data.loc[i - 1, "position_long"]),
                                                (data.loc[i, "position_lat"], data.loc[i, "position_long"]),
@@ -51,10 +57,7 @@ def process_gpx(data, season, time_of_day, watt_kilo, atl, ctl):
         data["slope"] = (data["altitude"] - data["altitude"].shift(1)) / data["distance"] * 100
         data["altitude_diff"] = data["altitude"].diff()
 
-
-
-
-    raw_data = data.copy()
+    data["cum_distance"] = data["distance"].cumsum()
 
     # Aggregate the dataframe
     distance = data["distance"].sum()
@@ -81,7 +84,7 @@ def process_gpx(data, season, time_of_day, watt_kilo, atl, ctl):
     for idx, row in slopes_pctg.iterrows():
         data_dict[f"{row['slope_color']}_pctg"] = row["distance_pctg"]
 
-    return pd.DataFrame(data_dict, index=[0]), raw_data
+    return pd.DataFrame(data_dict, index=[0]), data
 
 
 def search_models(models_folder="model_stats", n_models=2, verbose=False):
@@ -124,7 +127,7 @@ def search_models(models_folder="model_stats", n_models=2, verbose=False):
     return top_models
 
 
-def plot_prediction(gpx_data, pred_time_hours, pred_time_minutes, route_name, distance, ascent):
+def plot_prediction(gpx_data, pred_time_hours, pred_time_minutes, route_name, distance, ascent, quarter_info):
     """
     Plot the GPX data with predicted time and colored slope
     :param gpx_data: pd.DataFrame, the GPX data with required columns
@@ -133,6 +136,7 @@ def plot_prediction(gpx_data, pred_time_hours, pred_time_minutes, route_name, di
     :param route_name: str, name of the route
     :param distance: float, distance of the route
     :param ascent: float, ascent of the route
+    :param quarter_info: pd.DataFrame, the info of the quarters
     :return: None
 
     :rtype: None
@@ -146,18 +150,27 @@ def plot_prediction(gpx_data, pred_time_hours, pred_time_minutes, route_name, di
 
     fig, ax = plt.subplots(figsize=(10, 10))
 
-    # Plot GPX data with colored slope
     for i in range(len(gpx_data) - 1):
         ax.plot([gpx_data['position_long'][i], gpx_data['position_long'][i + 1]],
                 [gpx_data['position_lat'][i], gpx_data['position_lat'][i + 1]],
                 color=gpx_data['slope_color'].iloc[i], linewidth=2)
 
-    # Add start point to the plot as a blue star
     ax.plot(gpx_data['position_long'].iloc[0], gpx_data['position_lat'].iloc[0], '*', color='blue', label='Start')
+
+    # Start point text
+    start_lat = gpx_data['position_lat'].iloc[0]
+    start_long = gpx_data['position_long'].iloc[0]
+    ax.text(start_long, start_lat, 'Start', color='black', style='italic', fontsize=12, weight='bold')
 
     # Add background map using contextily
     ctx.add_basemap(ax, crs="EPSG:4326",
                     source=xzy.providers.OpenStreetMap.Mapnik)
+
+    # Add quarter points with an asterisk, and the time inside a box
+    for idx, row in quarter_info.iterrows():
+        ax.plot(row["position_long"], row["position_lat"], '*', color='red', label='Quarter')
+        ax.text(row["position_long"], row["position_lat"], row["time_str"], color='black', style='italic', fontsize=12,
+                weight='bold')
 
     # Remove axis labels and ticks
     ax.set_xticks([])
@@ -190,9 +203,10 @@ def make_prediction(model_pkl_path, route_data, model_name):
     hours = pred_segs // 3600
     minutes = (pred_segs % 3600) // 60
 
-    print(f"Predicted time for {model_name}: {int(hours)} hours and {int(minutes)} minutes")
+    # print(f"Predicted time for {model_name}: {int(hours)} hours and {int(minutes)} minutes")
 
-    return hours, minutes
+    return int(hours), int(minutes)
+
 
 ### MAIN SCRIPT ###
 # FITNESS = CTL
@@ -225,22 +239,41 @@ for file in os.listdir(gpx_folder):
         print(f"Processing {gpx_path}")
 
         route_agg, route_df = process_gpx(df, SEASON, TIME_OF_DAY, WATTKILO, ATL, CTL)
-        print(route_agg)
-        print(route_df)
-        exit()
         distance_km = route_agg["distance"].values[0] / 1000
         ascent_meters = route_agg["ascent_meters"].values[0]
 
+        # Separate the route in 3 chunks: 0-25%, 0-50%, 0-75%
+        first_qtr = route_df[route_df["cum_distance"] <= route_df["cum_distance"].max() * 0.25]
+        second_qtr = route_df[route_df["cum_distance"] <= route_df["cum_distance"].max() * 0.50]
+        third_qtr = route_df[route_df["cum_distance"] <= route_df["cum_distance"].max() * 0.75]
+
+        route_agg_1, _ = process_gpx(first_qtr, SEASON, TIME_OF_DAY, WATTKILO, ATL, CTL)
+        route_agg_2, _ = process_gpx(second_qtr, SEASON, TIME_OF_DAY, WATTKILO, ATL, CTL)
+        route_agg_3, _ = process_gpx(third_qtr, SEASON, TIME_OF_DAY, WATTKILO, ATL, CTL)
+
         for idx, model_info in available_models.iterrows():
             model_pkl_path = os.path.join("model_stats", model_info["model_file"])
-            try:
-                hours, minutes = make_prediction(model_pkl_path, route_agg, model_info["model_name"])
+            print(f"Making prediction with {model_info['model_name']}")
 
-            except Exception as e:
-                print(f"Error predicting with model {model_info['model_name']}: {e}")
-                continue
+            full_h, full_mins = make_prediction(model_pkl_path, route_agg, model_info["model_name"])
+            first_h, first_mins = make_prediction(model_pkl_path, route_agg_1, model_info["model_name"])
+            second_h, second_mins = make_prediction(model_pkl_path, route_agg_2, model_info["model_name"])
+            third_h, third_mins = make_prediction(model_pkl_path, route_agg_3, model_info["model_name"])
 
-            # plot_prediction(df, hours, minutes, file, distance_km,
-            #                 ascent_meters)
+            # Create a dict with the quarter info, time str, lat, long
+            quarter_info = pd.DataFrame({
+                "position_lat": [first_qtr["position_lat"].iloc[-1], second_qtr["position_lat"].iloc[-1],
+                                 third_qtr["position_lat"].iloc[-1]],
+                "position_long": [first_qtr["position_long"].iloc[-1], second_qtr["position_long"].iloc[-1],
+                                  third_qtr["position_long"].iloc[-1]],
+                "time_str": [f"{first_h}h {first_mins}m", f"{second_h}h {second_mins}m", f"{third_h}h {third_mins}m"]
+            })
 
-    break
+            print(f"First quarter: {first_h} hours and {first_mins} minutes")
+            print(f"Second quarter: {second_h} hours and {second_mins} minutes")
+            print(f"Third quarter: {third_h} hours and {third_mins} minutes")
+            print(f"Full route: {full_h} hours and {full_mins} minutes")
+
+            print("Plotting map")
+            plot_prediction(route_df, full_h, full_mins, file, distance_km,
+                            ascent_meters, quarter_info)
