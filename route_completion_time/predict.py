@@ -155,13 +155,13 @@ def plot_prediction(gpx_data, pred_time_hours, pred_time_minutes, route_name, di
                 [gpx_data['position_lat'][i], gpx_data['position_lat'][i + 1]],
                 color=gpx_data['slope_color'].iloc[i], linewidth=2)
 
-
     ax.plot(gpx_data['position_long'].iloc[0], gpx_data['position_lat'].iloc[0], '*', color='blue', label='Start')
 
     # Start point text
     start_lat = gpx_data['position_lat'].iloc[0]
     start_long = gpx_data['position_long'].iloc[0]
-    ax.text(start_long, start_lat, 'Start\n' + formatted_time, color='black', style='italic', fontsize=12, weight='bold')
+    ax.text(start_long, start_lat, 'Start\n' + formatted_time, color='black', style='italic', fontsize=12,
+            weight='bold')
 
     # Add background map using contextily
     ctx.add_basemap(ax, crs="EPSG:4326",
