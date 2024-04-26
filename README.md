@@ -26,12 +26,20 @@ Predicts the time it will take to complete a route based on the distance and ele
 
 ## Training the Regressor
 
-The training of the regressor is handled in the `train_regressor.py` script. This script reads the preprocessed data, prepares it for training, and then trains various regression models on it. The models currently supported are Ridge, SVR Linear, SVR RBF, Lasso, and ElasticNet.
+The training of the regressor is handled in the `train_regressor.py` script. This script reads the preprocessed data,
+prepares it for training, and then trains various regression models on it. The models currently supported are Ridge, SVR
+Linear, SVR RBF, Lasso, and ElasticNet.
 
-The script uses a pipeline to preprocess the data and train the model. The preprocessing step includes standard scaling for numerical features and one-hot encoding for categorical features. The training step uses GridSearchCV for hyperparameter tuning.
+The script uses a pipeline to preprocess the data and train the model. The preprocessing step includes standard scaling
+for numerical features and one-hot encoding for categorical features. The training step uses GridSearchCV for
+hyperparameter tuning.
 
-The script splits the data into a training set and a test set. The model is trained on the training set, and its performance is evaluated on the test set. The performance metrics used are Mean Squared Error (MSE), Mean Absolute Error (MAE), and R-squared (R2).
+The script splits the data into a training set and a test set. The model is trained on the training set, and its
+performance is evaluated on the test set. The performance metrics used are Mean Squared Error (MSE), Mean Absolute
+Error (MAE), and R-squared (R2).
 
-After training, the script saves the model, its performance metrics, and its coefficients to the `model_stats` directory. It also plots the coefficients of the model.
+After training, the script saves the model, its performance metrics, and its coefficients to the `model_stats`
+directory. It also plots the coefficients of the model.
 
-To train a regressor, run the `train_regressor.py` script. You can adjust the parameters of the models and the features used for training at the top of the script.
+To train a regressor, run the `train_regressor.py` script. You can adjust the parameters of the models and the features
+used for training at the top of the script.

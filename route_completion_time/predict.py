@@ -4,48 +4,43 @@ import pickle
 import gpxpy
 import haversine as hs
 import pandas as pd
+import xyzservices as xzy
 from haversine import Unit
 from matplotlib import pyplot as plt
-import xyzservices as xzy
 
 from preprocess import SLOPE_CUTS, SLOPE_LABELS
 
 
 def ingest_gpx(gpx_path):
     """
-    Ingest a GPX file and return a DataFrame with the relevant columns
-    :param gpx_path: str, path to the GPX file
+    Ingest the GPX file and return a DataFrame with the waypoints
+    :param gpx_path: str, the path to the GPX file
     :return: pd.DataFrame
-
-    :rtype: pd.DataFrame
     """
-    gpx_file = open(gpx_path, 'r')
-    gpx = gpxpy.parse(gpx_file, version='1.1')
+    with open(gpx_path, 'r') as gpx_file:
+        gpx = gpxpy.parse(gpx_file, version='1.1')
 
-    waypoints = []
-    for track in gpx.tracks:
-        for segment in track.segments:
-            for point in segment.points:
-                waypoints.append([point.latitude, point.longitude, point.elevation, point.time])
+    waypoints = [[point.latitude, point.longitude, point.elevation]
+                 for track in gpx.tracks
+                 for segment in track.segments
+                 for point in segment.points]
 
-    data = pd.DataFrame(waypoints, columns=["latitude", "longitude", "elevation", "time"])
-    data.rename(columns={"latitude": "position_lat", "longitude": "position_long", "elevation": "altitude",
-                         "time": "timestamp"}, inplace=True)
-    data.drop("timestamp", axis=1, inplace=True)
+    data = pd.DataFrame(waypoints, columns=["position_lat", "position_long", "altitude"])
 
     return data
 
 
 def process_gpx(data, season, time_of_day, watt_kilo, atl, ctl):
     """
-    Process the GPX data to calculate the distance, slope, and altitude difference
+    Process the GPX data to calculate the distance, slope, and altitude difference. Return a DataFrame with the
+    aggregated data and the raw data
     :param data: pd.DataFrame, the GPX data
     :param season: str, the season of the activity
     :param time_of_day: str, the time of day of the activity
     :param watt_kilo: float, the watt per kilogram of the athlete
     :param atl: int, the acute training load of the athlete
     :param ctl: int, the chronic training load of the athlete
-    :return: pd.DataFrame
+    :return: tuple(pd.DataFrame, pd.DataFrame)
 
     :rtype: pd.DataFrame
     """
@@ -55,6 +50,11 @@ def process_gpx(data, season, time_of_day, watt_kilo, atl, ctl):
                                                unit=Unit.METERS)
         data["slope"] = (data["altitude"] - data["altitude"].shift(1)) / data["distance"] * 100
         data["altitude_diff"] = data["altitude"].diff()
+
+
+
+
+    raw_data = data.copy()
 
     # Aggregate the dataframe
     distance = data["distance"].sum()
@@ -81,7 +81,7 @@ def process_gpx(data, season, time_of_day, watt_kilo, atl, ctl):
     for idx, row in slopes_pctg.iterrows():
         data_dict[f"{row['slope_color']}_pctg"] = row["distance_pctg"]
 
-    return pd.DataFrame(data_dict, index=[0])
+    return pd.DataFrame(data_dict, index=[0]), raw_data
 
 
 def search_models(models_folder="model_stats", n_models=2, verbose=False):
@@ -164,35 +164,14 @@ def plot_prediction(gpx_data, pred_time_hours, pred_time_minutes, route_name, di
     ax.set_yticks([])
 
     # Set title
-    plt.title("Route: " + route_name + f"\nDistance: {distance:.2f} km, Ascent: {ascent:.2f} meters" + "\nPredicted time: " + str(formatted_time))
+    plt.title(
+        "Route: " + route_name + f"\nDistance: {distance:.2f} km, Ascent: {ascent:.2f} meters" + "\nPredicted time: " + str(
+            formatted_time))
 
     # Save plot
     plt.savefig(f"model_stats/{route_name}_prediction.png", bbox_inches='tight')
 
-
-def predict_10km_time(watt_kilo, atl, ctl, season, time_of_day, gpx_path, model_pkl_path, model_name):
-    # Receive the entire GPX file
-    # Traverse the GPX file and calculate the cumsum distance
-    # Every 10km calculate the time with the model for the traveled distance
-    # Save in a new df the coords, distance and predicted time
-
-    predictions = pd.DataFrame(columns=["latitude", "longitude", "distance", "predicted_time"])
-    gpx_data = ingest_gpx(gpx_path)
-    distance = 0
-    for i in range(1, len(gpx_data)):
-        distance += hs.haversine((gpx_data.loc[i - 1, "position_lat"], gpx_data.loc[i - 1, "position_long"]),
-                                 (gpx_data.loc[i, "position_lat"], gpx_data.loc[i, "position_long"]),
-                                 unit=Unit.METERS)
-        if distance >= 10000:
-            route_data = process_gpx(gpx_data[:i], season, time_of_day, watt_kilo, atl, ctl)
-            hours, minutes = make_prediction(model_pkl_path, route_data, model_name)
-            predictions = predictions.append({"latitude": gpx_data.loc[i, "position_lat"],
-                                              "longitude": gpx_data.loc[i, "position_long"],
-                                              "distance": distance,
-                                              "predicted_time": hours * 3600 + minutes * 60}, ignore_index=True)
-            distance = 0
-
-    return predictions
+    return None
 
 
 def make_prediction(model_pkl_path, route_data, model_name):
@@ -213,15 +192,7 @@ def make_prediction(model_pkl_path, route_data, model_name):
 
     print(f"Predicted time for {model_name}: {int(hours)} hours and {int(minutes)} minutes")
 
-    ### 10kms prediction
-    predictions_10km = predict_10km_time(route_data["wattkilo"].values[0], route_data["atl"].values[0],
-                                         route_data["ctl"].values[0], route_data["season"].values[0],
-                                         route_data["time_of_day"].values[0], gpx_path, model_pkl_path, model_name)
-
-    print(predictions_10km)
-
     return hours, minutes
-
 
 ### MAIN SCRIPT ###
 # FITNESS = CTL
@@ -236,8 +207,8 @@ WATTKILO = WATTS / KILOS
 ATL = 51
 CTL = 31
 
-RACE_ATL = 51
-RACE_CTL = 31
+# RACE_ATL = 51
+# RACE_CTL = 31
 
 print(f"Watt per kilo: {WATTKILO}")
 
@@ -253,16 +224,17 @@ for file in os.listdir(gpx_folder):
         print("-" * 50)
         print(f"Processing {gpx_path}")
 
-        route_data = process_gpx(df, SEASON, TIME_OF_DAY, WATTKILO, ATL, CTL)
-        distance_km = route_data["distance"].values[0] / 1000
-        ascent_meters = route_data["ascent_meters"].values[0]
-        print(f"Distance: {distance_km:.2f} km")
-        print(f"Ascent: {ascent_meters:.2f} meters")
+        route_agg, route_df = process_gpx(df, SEASON, TIME_OF_DAY, WATTKILO, ATL, CTL)
+        print(route_agg)
+        print(route_df)
+        exit()
+        distance_km = route_agg["distance"].values[0] / 1000
+        ascent_meters = route_agg["ascent_meters"].values[0]
 
         for idx, model_info in available_models.iterrows():
             model_pkl_path = os.path.join("model_stats", model_info["model_file"])
             try:
-                hours, minutes = make_prediction(model_pkl_path, route_data, model_info["model_name"])
+                hours, minutes = make_prediction(model_pkl_path, route_agg, model_info["model_name"])
 
             except Exception as e:
                 print(f"Error predicting with model {model_info['model_name']}: {e}")
@@ -270,3 +242,5 @@ for file in os.listdir(gpx_folder):
 
             # plot_prediction(df, hours, minutes, file, distance_km,
             #                 ascent_meters)
+
+    break
