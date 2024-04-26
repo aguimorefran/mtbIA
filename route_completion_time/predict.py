@@ -155,12 +155,13 @@ def plot_prediction(gpx_data, pred_time_hours, pred_time_minutes, route_name, di
                 [gpx_data['position_lat'][i], gpx_data['position_lat'][i + 1]],
                 color=gpx_data['slope_color'].iloc[i], linewidth=2)
 
+
     ax.plot(gpx_data['position_long'].iloc[0], gpx_data['position_lat'].iloc[0], '*', color='blue', label='Start')
 
     # Start point text
     start_lat = gpx_data['position_lat'].iloc[0]
     start_long = gpx_data['position_long'].iloc[0]
-    ax.text(start_long, start_lat, 'Start', color='black', style='italic', fontsize=12, weight='bold')
+    ax.text(start_long, start_lat, 'Start\n' + formatted_time, color='black', style='italic', fontsize=12, weight='bold')
 
     # Add background map using contextily
     ctx.add_basemap(ax, crs="EPSG:4326",
@@ -224,7 +225,6 @@ CTL = 31
 # RACE_ATL = 51
 # RACE_CTL = 31
 
-print(f"Watt per kilo: {WATTKILO}")
 
 gpx_folder = "../data/gpx"
 preprocessor_pkl_path = "preprocessor.pkl"
@@ -233,10 +233,15 @@ available_models = search_models(n_models=n_models)
 
 for file in os.listdir(gpx_folder):
     if file.endswith(".gpx"):
+        # Ask user to continue with this file
         gpx_path = os.path.join(gpx_folder, file)
         df = ingest_gpx(gpx_path)
         print("-" * 50)
         print(f"Processing {gpx_path}")
+        print("Do you want to skip this file? (y/n)")
+        skip = input()
+        if skip == "y":
+            continue
 
         route_agg, route_df = process_gpx(df, SEASON, TIME_OF_DAY, WATTKILO, ATL, CTL)
         distance_km = route_agg["distance"].values[0] / 1000
