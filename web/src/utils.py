@@ -1,10 +1,8 @@
-import os
-import joblib
-import pandas as pd
-import sys
 import gpxpy
 import haversine as hs
+import joblib
 import numpy as np
+import pandas as pd
 from haversine import Unit
 
 COLS_TO_KEEP = [
@@ -34,6 +32,7 @@ WELLNESS_COLS = [
 model_path = "web/src/models/lasso_model.pkl"
 model_stats_path = "web/src/models/lasso_stats.csv"
 
+
 def load_model():
     model = joblib.load(model_path)
 
@@ -43,6 +42,7 @@ def load_model():
     stats = stats.round(3)
 
     return model, stats
+
 
 def ingest_gpx(gpx_path):
     with open(gpx_path, 'r') as gpx_file:
@@ -56,6 +56,7 @@ def ingest_gpx(gpx_path):
     data = pd.DataFrame(waypoints, columns=["position_lat", "position_long", "altitude"])
 
     return data
+
 
 def process_gpx(data, season, time_of_day, watt_kilo, atl, ctl):
     data = data.copy()
@@ -97,6 +98,7 @@ def process_gpx(data, season, time_of_day, watt_kilo, atl, ctl):
 
     return pd.DataFrame(data_dict, index=[0]), data
 
+
 def preprocess_gpx(gpx_path, season, time_of_day, watt_kilo, atl, ctl):
     data = ingest_gpx(gpx_path)
     route_agg, route_df = process_gpx(data, season, time_of_day, watt_kilo, atl, ctl)
@@ -105,10 +107,63 @@ def preprocess_gpx(gpx_path, season, time_of_day, watt_kilo, atl, ctl):
 
 
 def model_predict(model, route_data):
+    # Set season and time of day to lowercase
+    route_data["season"] = route_data["season"].str.lower()
+    route_data["time_of_day"] = route_data["time_of_day"].str.lower()
     pred_segs = model.predict(route_data)[0]
     hours = pred_segs // 3600
     minutes = (pred_segs % 3600) // 60
 
     return int(hours), int(minutes)
 
-def predict():
+
+def predict(model, route_agg, route_df, season, time_of_day, watt_kilo, atl, ctl):
+    quarters = [(0.25, 'Quarter 1'), (0.50, 'Quarter 2'), (0.75, 'Quarter 3')]
+    quarter_info = []
+
+    for ratio, quarter in quarters:
+        quarter_df = route_df[route_df["cum_distance"] <= route_df["cum_distance"].max() * ratio]
+        route_agg_qtr, _ = process_gpx(quarter_df, season, time_of_day, watt_kilo, atl, ctl)
+        hours, mins = model_predict(model, route_agg_qtr)
+        quarter_info.append({
+            "Quarter": quarter,
+            "position_lat": quarter_df["position_lat"].iloc[-1],
+            "position_long": quarter_df["position_long"].iloc[-1],
+            "time_str": f"{hours}h {mins}m",
+            "distance": quarter_df["cum_distance"].iloc[-1]
+        })
+
+    full_h, full_mins = model_predict(model, route_agg)
+    quarter_info.append({
+        "Quarter": "Full",
+        "position_lat": route_df["position_lat"].iloc[-1],
+        "position_long": route_df["position_long"].iloc[-1],
+        "time_str": f"{full_h}h {full_mins}m",
+        "distance": route_df["cum_distance"].iloc[-1]
+    })
+
+    return pd.DataFrame(quarter_info)
+
+
+def plot_map(route_df, prediction):
+    import folium
+
+    m = folium.Map(location=[route_df["position_lat"].mean(), route_df["position_long"].mean()], zoom_start=12)
+
+    for idx, row in route_df.iterrows():
+        folium.CircleMarker(
+            location=[row["position_lat"], row["position_long"]],
+            radius=5,
+            color="blue",
+            fill=True,
+            fill_color="blue"
+        ).add_to(m)
+
+    for idx, row in prediction.iterrows():
+        folium.Marker(
+            location=[row["position_lat"], row["position_long"]],
+            popup=f"Time: {row['time_str']} - Distance: {row['distance']}",
+            icon=folium.Icon(color="red")
+        ).add_to(m)
+
+    return m

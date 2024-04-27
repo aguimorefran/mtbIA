@@ -1,8 +1,7 @@
 import tempfile
 
 import streamlit as st
-from utils import load_model, preprocess_gpx
-
+from utils import load_model, preprocess_gpx, predict, plot_map
 
 PAGE_TITLE = "Time Prediction"
 atl = 30
@@ -28,6 +27,7 @@ The model takes into account various factors such as the distance, elevation, an
 When you input the GPX of the route, the model will use this information to make its predictions.
 """)
 
+
 def input_values():
     global atl, ctl, ftp_watts, weight_kg, time_of_day, season
     st.write("Please input the following values to get a more accurate prediction.")
@@ -39,6 +39,7 @@ def input_values():
     time_of_day = st.selectbox("Time of day", time_of_day_options)
     season = st.selectbox("Season", season_options)
 
+
 def load_model_stats():
     global model
     model, stats = load_model()
@@ -47,14 +48,12 @@ def load_model_stats():
     st.dataframe(stats.set_index('r2'))
 
 
-
 st.title(PAGE_TITLE)
 
 input_values()
 load_model_stats()
 
 uploaded_file = st.file_uploader("Choose a GPX file", type="gpx")
-
 
 if uploaded_file is not None:
     tfile = tempfile.NamedTemporaryFile(delete=False)
@@ -73,7 +72,12 @@ if uploaded_file is not None:
         red_pctg = route_agg["red_pctg"].values[0]
         black_pctg = route_agg["black_pctg"].values[0]
 
-    if st.button("Make prediction"):
-        prediction = model.predict(route_df)
-        st.write(f"Predicted time: {prediction[0].round(2)} minutes")
+        prediction = predict(
+            model, route_agg, route_df, season, time_of_day, watts_per_kg, atl, ctl
+        )
+        # Round column distance to 2 decimal places and divide by 1000 to convert to kilometers
+        prediction["distance"] = (prediction["distance"] / 1000).round(2)
 
+        st.dataframe(prediction)
+
+        plot_map(route_df, prediction)
