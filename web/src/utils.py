@@ -4,6 +4,8 @@ import joblib
 import numpy as np
 import pandas as pd
 from haversine import Unit
+from streamlit_folium import st_folium
+import folium
 
 COLS_TO_KEEP = [
     "id",
@@ -117,11 +119,13 @@ def model_predict(model, route_data):
     return int(hours), int(minutes)
 
 
-def predict(model, route_agg, route_df, season, time_of_day, watt_kilo, atl, ctl):
+def predict(model, route_agg, route_df, season, time_of_day, watt_kilo, atl, ctl, pbar):
     quarters = [(0.25, 'Quarter 1'), (0.50, 'Quarter 2'), (0.75, 'Quarter 3')]
     quarter_info = []
 
     for ratio, quarter in quarters:
+        progress = 50 + 50/4 * (quarters.index((ratio, quarter))+1)
+        pbar.progress(int(progress), f"Predicting {quarter}...")
         quarter_df = route_df[route_df["cum_distance"] <= route_df["cum_distance"].max() * ratio]
         route_agg_qtr, _ = process_gpx(quarter_df, season, time_of_day, watt_kilo, atl, ctl)
         hours, mins = model_predict(model, route_agg_qtr)
@@ -148,22 +152,12 @@ def predict(model, route_agg, route_df, season, time_of_day, watt_kilo, atl, ctl
 def plot_map(route_df, prediction):
     import folium
 
-    m = folium.Map(location=[route_df["position_lat"].mean(), route_df["position_long"].mean()], zoom_start=12)
+    m = folium.Map(location=[route_df["position_lat"].mean(), route_df["position_long"].mean()], zoom_start=14)
+    folium.PolyLine(
+        route_df[["position_lat", "position_long"]].values,
+        color='blue',
+        weight=2.5,
+        opacity=1
+    ).add_to(m)
 
-    for idx, row in route_df.iterrows():
-        folium.CircleMarker(
-            location=[row["position_lat"], row["position_long"]],
-            radius=5,
-            color="blue",
-            fill=True,
-            fill_color="blue"
-        ).add_to(m)
-
-    for idx, row in prediction.iterrows():
-        folium.Marker(
-            location=[row["position_lat"], row["position_long"]],
-            popup=f"Time: {row['time_str']} - Distance: {row['distance']}",
-            icon=folium.Icon(color="red")
-        ).add_to(m)
-
-    return m
+    st_folium(m)

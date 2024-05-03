@@ -55,29 +55,48 @@ load_model_stats()
 
 uploaded_file = st.file_uploader("Choose a GPX file", type="gpx")
 
-if uploaded_file is not None:
+if st.button("Process"):
+
+    if uploaded_file is None:
+        st.error("Please upload a GPX file")
+        st.stop()
+
+    if model is None:
+        st.error("Error loading model. Please try again.")
+        st.stop()
+
+    pbar = st.progress(0, "Processing GPX file...")
+
     tfile = tempfile.NamedTemporaryFile(delete=False)
     tfile.write(uploaded_file.getvalue())
     temp_file_path = tfile.name
     watts_per_kg = ftp_watts / weight_kg
     route_agg, route_df = preprocess_gpx(temp_file_path, season, time_of_day, watts_per_kg, atl, ctl)
 
-    if route_agg is not None:
-        distance = route_agg["distance"].values[0].round(2)
-        ascent_meters = route_agg["ascent_meters"].values[0].round(2)
-        downhill_pctg = route_agg["downhill_pctg"].values[0]
-        green_pctg = route_agg["green_pctg"].values[0]
-        yellow_pctg = route_agg["yellow_pctg"].values[0]
-        orange_pctg = route_agg["orange_pctg"].values[0]
-        red_pctg = route_agg["red_pctg"].values[0]
-        black_pctg = route_agg["black_pctg"].values[0]
 
-        prediction = predict(
-            model, route_agg, route_df, season, time_of_day, watts_per_kg, atl, ctl
-        )
-        # Round column distance to 2 decimal places and divide by 1000 to convert to kilometers
-        prediction["distance"] = (prediction["distance"] / 1000).round(2)
+    if route_agg is None:
+        st.error("Error processing the GPX file. Please try again.")
+        st.stop()
 
-        st.dataframe(prediction)
+    pbar.progress(50, "Predicting time...")
 
-        plot_map(route_df, prediction)
+    distance = route_agg["distance"].values[0].round(2)
+    ascent_meters = route_agg["ascent_meters"].values[0].round(2)
+    downhill_pctg = route_agg["downhill_pctg"].values[0]
+    green_pctg = route_agg["green_pctg"].values[0]
+    yellow_pctg = route_agg["yellow_pctg"].values[0]
+    orange_pctg = route_agg["orange_pctg"].values[0]
+    red_pctg = route_agg["red_pctg"].values[0]
+    black_pctg = route_agg["black_pctg"].values[0]
+
+    prediction = predict(
+        model, route_agg, route_df, season, time_of_day, watts_per_kg, atl, ctl, pbar
+    )
+    # Round column distance to 2 decimal places and divide by 1000 to convert to kilometers
+    prediction["distance"] = (prediction["distance"] / 1000).round(2)
+
+    pbar.progress(100, "Done!")
+
+    st.dataframe(prediction)
+
+    # plot_map(route_df, prediction)
