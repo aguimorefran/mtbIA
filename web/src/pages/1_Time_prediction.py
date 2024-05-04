@@ -99,4 +99,4 @@ if st.button("Process"):
 
     st.dataframe(prediction)
 
-    # plot_map(route_df, prediction)
+    result_map = plot_map(route_df, prediction)

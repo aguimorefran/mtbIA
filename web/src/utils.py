@@ -150,14 +150,44 @@ def predict(model, route_agg, route_df, season, time_of_day, watt_kilo, atl, ctl
 
 
 def plot_map(route_df, prediction):
-    import folium
+    center_lat, center_long = route_df["position_lat"].mean(), route_df["position_long"].mean()
 
-    m = folium.Map(location=[route_df["position_lat"].mean(), route_df["position_long"].mean()], zoom_start=14)
-    folium.PolyLine(
-        route_df[["position_lat", "position_long"]].values,
-        color='blue',
-        weight=2.5,
-        opacity=1
+    m = folium.Map(
+        location=[center_lat, center_long],
+        zoom_start=15,
+        control_scale=True
+    )
+
+    route_df["slope_color"] = route_df["slope_color"].replace("downhill", "grey")
+
+    for idx in range(1, len(route_df)):
+        folium.PolyLine(
+            [(route_df["position_lat"].iloc[idx - 1], route_df["position_long"].iloc[idx - 1]),
+             (route_df["position_lat"].iloc[idx], route_df["position_long"].iloc[idx])],
+            color=route_df["slope_color"].iloc[idx],
+            weight=2.5,
+            opacity=0.8
+        ).add_to(m)
+
+    # Add start marker
+    folium.Marker(
+        location=[route_df["position_lat"].iloc[0], route_df["position_long"].iloc[0]],
+        popup="Start",
+        icon=folium.Icon(color="green")
     ).add_to(m)
 
-    st_folium(m)
+    # Add quarter markers with time and distance
+    for idx, row in prediction.iterrows():
+        icon_number = str(idx + 1)
+        folium.Marker(
+            location=[row["position_lat"], row["position_long"]],
+            popup=f"{row['time_str']} - {row['distance']} km",
+            icon=folium.Icon(icon=icon_number, prefix="fa", color="red")
+        ).add_to(m)
+
+    return st_folium(
+        m,
+        height=800,
+        width=1500,
+        returned_objects=[]
+    )
