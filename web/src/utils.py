@@ -60,7 +60,9 @@ def ingest_gpx(gpx_path):
     return data
 
 
-def process_gpx(data, season, time_of_day, watt_kilo, atl, ctl):
+def process_gpx(data, season, time_of_day, watt_kilo, atl, ctl, pbar):
+    pbar_min = 20
+    pbar_max = 100
     data = data.copy()
     data.reset_index(drop=True, inplace=True)
 
@@ -70,6 +72,11 @@ def process_gpx(data, season, time_of_day, watt_kilo, atl, ctl):
                                                unit=Unit.METERS)
         data["slope"] = (data["altitude"] - data["altitude"].shift(1)) / data["distance"] * 100
         data["altitude_diff"] = data["altitude"].diff()
+        pb = pbar_min + (pbar_max - pbar_min) * i / len(data)
+        pb_pctg = pb / pbar_max * 100
+        pbar.progress(int(pb), f"Processing GPX data... ({pb_pctg:.2f}%)")
+
+    pbar.progress(pbar_max, "Done processing GPX data")
 
     data["cum_distance"] = data["distance"].cumsum()
 
@@ -101,9 +108,11 @@ def process_gpx(data, season, time_of_day, watt_kilo, atl, ctl):
     return pd.DataFrame(data_dict, index=[0]), data
 
 
-def preprocess_gpx(gpx_path, season, time_of_day, watt_kilo, atl, ctl):
+def preprocess_gpx(gpx_path, season, time_of_day, watt_kilo, atl, ctl, pbar):
+    pbar.progress(10, "Ingesting GPX file...")
     data = ingest_gpx(gpx_path)
-    route_agg, route_df = process_gpx(data, season, time_of_day, watt_kilo, atl, ctl)
+    pbar.progress(20, "Processing GPX data...")
+    route_agg, route_df = process_gpx(data, season, time_of_day, watt_kilo, atl, ctl, pbar)
 
     return route_agg, route_df
 
@@ -124,10 +133,10 @@ def predict(model, route_agg, route_df, season, time_of_day, watt_kilo, atl, ctl
     quarter_info = []
 
     for ratio, quarter in quarters:
-        progress = 50 + 50/4 * (quarters.index((ratio, quarter))+1)
+        progress = 100/4 * (quarters.index((ratio, quarter))+1)
         pbar.progress(int(progress), f"Predicting {quarter}...")
         quarter_df = route_df[route_df["cum_distance"] <= route_df["cum_distance"].max() * ratio]
-        route_agg_qtr, _ = process_gpx(quarter_df, season, time_of_day, watt_kilo, atl, ctl)
+        route_agg_qtr, _ = process_gpx(quarter_df, season, time_of_day, watt_kilo, atl, ctl, pbar)
         hours, mins = model_predict(model, route_agg_qtr)
         quarter_info.append({
             "Quarter": quarter,

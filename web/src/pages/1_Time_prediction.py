@@ -65,20 +65,20 @@ if st.button("Process"):
         st.error("Error loading model. Please try again.")
         st.stop()
 
-    pbar = st.progress(0, "Processing GPX file...")
+    pbar_process = st.progress(0, "Processing GPX file...")
 
     tfile = tempfile.NamedTemporaryFile(delete=False)
     tfile.write(uploaded_file.getvalue())
     temp_file_path = tfile.name
     watts_per_kg = ftp_watts / weight_kg
-    route_agg, route_df = preprocess_gpx(temp_file_path, season, time_of_day, watts_per_kg, atl, ctl)
+    route_agg, route_df = preprocess_gpx(temp_file_path, season, time_of_day, watts_per_kg, atl, ctl, pbar_process)
 
 
     if route_agg is None:
         st.error("Error processing the GPX file. Please try again.")
         st.stop()
 
-    pbar.progress(50, "Predicting time...")
+    pbar_predict = st.progress(0, "Predicting time...")
 
     distance = route_agg["distance"].values[0].round(2)
     ascent_meters = route_agg["ascent_meters"].values[0].round(2)
@@ -90,12 +90,12 @@ if st.button("Process"):
     black_pctg = route_agg["black_pctg"].values[0]
 
     prediction = predict(
-        model, route_agg, route_df, season, time_of_day, watts_per_kg, atl, ctl, pbar
+        model, route_agg, route_df, season, time_of_day, watts_per_kg, atl, ctl, pbar_predict
     )
     # Round column distance to 2 decimal places and divide by 1000 to convert to kilometers
     prediction["distance"] = (prediction["distance"] / 1000).round(2)
 
-    pbar.progress(100, "Done!")
+    pbar_predict.progress(100, "Done!")
 
     st.dataframe(prediction)
 
