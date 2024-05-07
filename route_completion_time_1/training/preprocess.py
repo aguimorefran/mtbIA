@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-processed_activities_file = "../data/train/processed_activities.csv"
-wellness_file = "../data/train/wellness.csv"
+processed_activities_file = "../../data/train/processed_activities.csv"
+wellness_file = "../../data/train/wellness.csv"
 df_activity = pd.read_csv(processed_activities_file)
 
 COLS_TO_KEEP = [
