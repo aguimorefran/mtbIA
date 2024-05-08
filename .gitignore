@@ -2,3 +2,4 @@ env.py
 *.fit
 *.tcx
 env.py
+.env
