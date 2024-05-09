@@ -1,0 +1,6 @@
+requests
+python-dotenv
+numpy
+fitparse
+pandas
+datetime

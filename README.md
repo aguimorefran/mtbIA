@@ -1,8 +1,17 @@
-# MTB-IA
+# mtb-IA
 
-A bunch of tools to predict cool data for MTB routes.
+## Route completion time
 
-## Route completion time MK1
-A simple Lasso model trained with aggregated Strava info among other data from other platforms. Serves as a sketchbook for future developments.
 
-[Link](https://github.com/aguimorefran/mtbIA/blob/main/route_completion_time_1/README.md)
+
+### Data retrieval 
+
+Execute `python fetch_data.py` to download and prepare the data from Intervals ICU. The data will be downloaded to `activity_data.csv` file.
+
+The script takes the following arguments:
+
+- `start_date`: The start date of the data retrieval in format dd-mm-yyyy. Default is 02/12/2023.
+- `ATHLETE_ID`: The athlete ID to retrieve the data from. Default is 1.
+- `API_KEY`: The API key to access the data. Default is '1234'.
+
+If ATHLETE_ID and API_KEY are not provided, the script will try to read them from the environment variables `ATHLETE_ID` and `API_KEY` respectively.

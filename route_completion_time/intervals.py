@@ -1,5 +1,4 @@
 import datetime
-
 import requests
 
 # https://codeberg.org/tmllull/intervalsicu-to-influxdb/src/branch/main/src/intervalsicu_to_influxdb/clients/intervals_client.py
@@ -30,7 +29,7 @@ class Intervals:
         res = session.request(method, url, params=params)
 
         if res.status_code != 200:
-            raise Exception("Error on request:" + str(res))
+            raise requests.exceptions.RequestException("Error on request: " + str(res, res.text))
 
         return res
 
@@ -248,3 +247,21 @@ class Intervals:
         }
         res = self._make_request("get", url, params=params)
         return res.json()
+    
+    def activity_fit_data(self, activity_id, include_power=True, include_hr=True):
+        """
+        Download the FIT file for a specific activity.
+
+        :param activity_id: The ID of the activity
+        :param include_power: Include power data in the FIT file
+        :param include_hr: Include heart rate data in the FIT file
+        :return: The FIT file content
+        """
+        url = f"{self.BASE_URL}/api/v1/activity/{activity_id}/fit-file"
+        params = {
+            'power': include_power,
+            'hr': include_hr
+        }
+        response = self._make_request('GET', url, params=params)
+
+        return response.content
