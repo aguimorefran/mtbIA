@@ -41,6 +41,7 @@ def fetch_wellness(icu, start_date):
     df["date"] = pd.to_datetime(df["id"])
     df = df.drop(columns=["id"])
     df = df.sort_values(by="date")
+
     df["eftp"] = df["sportInfo"].apply(lambda x: x[0]["eftp"] if len(x) > 0 else None)
     df = df.drop(columns=["sportInfo"])
 
@@ -84,6 +85,7 @@ def fetch_and_combine_activity_data(icu, activity_ids):
         result = retrieve_activity_data(icu, activity_id)
         if not result.empty:
             result["activity_id"] = activity_id
+            result["hour_of_day"] = result["timestamp"].dt.hour
             dfs.append(result)
 
     return pd.concat(dfs, ignore_index=True)
@@ -99,7 +101,7 @@ def summarize_activity_data(activity_df, wellness_df):
     diffs = activity_df["distance"].diff()
     slopes = np.where(diffs != 0, activity_df["altitude_diff"] / diffs * 100, 0)
     activity_df["slope"] = slopes
-    activity_df["slope"].fillna(0, inplace=True)
+    activity_df["slope"].fillna(0)
 
     initial_time = activity_df["timestamp"].iloc[0]
     activity_df["elapsed_time"] = (
@@ -120,7 +122,6 @@ def summarize_activity_data(activity_df, wellness_df):
     wellness_df["date"] = wellness_df["date"].astype(str)
     agg_df = pd.merge(activity_df, wellness_df, on="date", how="left")
 
-
     agg_df = (
         agg_df.groupby(["activity_id", "date"])
         .agg(
@@ -129,6 +130,7 @@ def summarize_activity_data(activity_df, wellness_df):
                 "altitude_diff": lambda x: x[x > 0].sum(),
                 "elapsed_time": "max",
                 "time_of_day": "first",
+                "hour_of_day": "first",
                 "atl_start": "first",
                 "ctl_start": "first",
                 "weight": "first",
@@ -137,6 +139,14 @@ def summarize_activity_data(activity_df, wellness_df):
             }
         )
         .reset_index()
+        .rename(
+            columns={
+                "altitude_diff": "elevation_gain",
+                "elapsed_time": "duration_seconds",
+                "temperature": "avg_temperature",
+                "distance": "distance_meters",
+            }
+        )
     )
 
     agg_df = agg_df.dropna()
@@ -160,7 +170,11 @@ def main():
     load_dotenv()
 
     parser = argparse.ArgumentParser(description="Fetch wellness and activity data")
-    parser.add_argument("--start_date", type=str, help="Start date for fetching data, format: dd/mm/yyyy")
+    parser.add_argument(
+        "--start_date",
+        type=str,
+        help="Start date for fetching data, format: dd/mm/yyyy",
+    )
     parser.add_argument("--athlete_id", type=str, help="Athlete ID for the API")
     parser.add_argument("--api_key", type=str, help="API Key for accessing the API")
     args = parser.parse_args()
@@ -172,7 +186,9 @@ def main():
     API_KEY = args.api_key if args.api_key else os.getenv("API_KEY")
 
     if not ATHLETE_ID or not API_KEY:
-        print("Error: ATHLETE_ID and API_KEY must be provided either via command line or .env file.")
+        print(
+            "Error: ATHLETE_ID and API_KEY must be provided either via command line or .env file."
+        )
         sys.exit(1)
 
     icu = Intervals(ATHLETE_ID, API_KEY)
@@ -183,6 +199,7 @@ def main():
     fetched_activity_data = fetch_and_combine_activity_data(icu, activity_id_list)
     summarized_data = summarize_activity_data(fetched_activity_data, wellness_data)
     summarized_data.to_csv("activity_data.csv", index=False)
+
 
 if __name__ == "__main__":
     main()
