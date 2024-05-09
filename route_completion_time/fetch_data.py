@@ -7,8 +7,7 @@ import tqdm
 import fitparse
 import numpy as np
 from io import BytesIO
-import concurrent.futures
-from dotenv import load_dotenv
+import env
 from intervals import Intervals
 
 WELLNESS_COLS = [
@@ -23,11 +22,8 @@ WELLNESS_COLS = [
 
 SLOPE_CUTS = [-np.inf, -15, -1, 4, 8, 12, 20, np.inf]
 SLOPE_LABELS = ["dh_extreme", "dh", "green", "yellow", "orange", "red", "black"]
-TIME_OF_DAY_CUTS = [0, 6, 12, 18, 24]
-TIME_OF_DAY_LABELS = ["night", "morning", "afternoon", "evening"]
 
 TODAY_DATE = datetime.date.today()
-START_DATE = "02/12/2023"
 
 
 def fetch_wellness(icu, start_date):
@@ -108,12 +104,6 @@ def summarize_activity_data(activity_df, wellness_df):
         activity_df["timestamp"] - initial_time
     ).dt.total_seconds()
 
-    activity_df["time_of_day"] = pd.cut(
-        activity_df["timestamp"].dt.hour,
-        bins=TIME_OF_DAY_CUTS,
-        labels=TIME_OF_DAY_LABELS,
-        right=False,
-    )
     activity_df["slope_color"] = pd.cut(
         activity_df["slope"], bins=SLOPE_CUTS, labels=SLOPE_LABELS
     )
@@ -129,11 +119,9 @@ def summarize_activity_data(activity_df, wellness_df):
                 "distance": "max",
                 "altitude_diff": lambda x: x[x > 0].sum(),
                 "elapsed_time": "max",
-                "time_of_day": "first",
                 "hour_of_day": "first",
                 "atl_start": "first",
                 "ctl_start": "first",
-                "weight": "first",
                 "watt_kg": "first",
                 "temperature": "mean",
             }
@@ -167,8 +155,6 @@ def summarize_activity_data(activity_df, wellness_df):
 
 
 def main():
-    load_dotenv()
-
     parser = argparse.ArgumentParser(description="Fetch wellness and activity data")
     parser.add_argument(
         "--start_date",
@@ -179,22 +165,22 @@ def main():
     parser.add_argument("--api_key", type=str, help="API Key for accessing the API")
     args = parser.parse_args()
 
-    start_date = args.start_date if args.start_date else START_DATE
+    start_date = args.start_date if args.start_date else env.START_DATE
     start_date = datetime.datetime.strptime(start_date, "%d/%m/%Y").date()
 
-    ATHLETE_ID = args.athlete_id if args.athlete_id else os.getenv("ATHLETE_ID")
-    API_KEY = args.api_key if args.api_key else os.getenv("API_KEY")
+    ATHLETE_ID = args.athlete_id if args.athlete_id else env.ATHLETE_ID
+    API_KEY = args.api_key if args.api_key else env.API_KEY
 
     if not ATHLETE_ID or not API_KEY:
         print(
-            "Error: ATHLETE_ID and API_KEY must be provided either via command line or .env file."
+            "Error: ATHLETE_ID and API_KEY must be provided either via command line or env.py."
         )
         sys.exit(1)
 
     icu = Intervals(ATHLETE_ID, API_KEY)
 
     wellness_data = fetch_wellness(icu, start_date)
-    activity_list = icu.activities(start_date, TODAY_DATE)
+    activity_list = icu.activities(start_date, datetime.date.today())
     activity_id_list = [activity["id"] for activity in activity_list]
     fetched_activity_data = fetch_and_combine_activity_data(icu, activity_id_list)
     summarized_data = summarize_activity_data(fetched_activity_data, wellness_data)
