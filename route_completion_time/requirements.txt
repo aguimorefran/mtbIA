@@ -4,3 +4,5 @@ numpy
 fitparse
 pandas
 datetime
+matplotlib
+scikit-learn
