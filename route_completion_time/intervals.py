@@ -1,5 +1,7 @@
 import datetime
+
 import requests
+
 
 # https://codeberg.org/tmllull/intervalsicu-to-influxdb/src/branch/main/src/intervalsicu_to_influxdb/clients/intervals_client.py
 
@@ -227,13 +229,13 @@ class Intervals:
         return res.json()
 
     def power_curve(
-        self,
-        newest=datetime.datetime.now(),
-        curves="90d",
-        type="Ride",
-        include_ranks=False,
-        sub_max_efforts=0,
-        filters='[{"field_id": "type", "value": ["Ride", "VirtualRide"]}]',
+            self,
+            newest=datetime.datetime.now(),
+            curves="90d",
+            type="Ride",
+            include_ranks=False,
+            sub_max_efforts=0,
+            filters='[{"field_id": "type", "value": ["Ride", "VirtualRide"]}]',
     ):
         """ """
         url = f"{self.BASE_URL}/api/v1/athlete/{self.athlete_id}/power-curves"
@@ -247,7 +249,7 @@ class Intervals:
         }
         res = self._make_request("get", url, params=params)
         return res.json()
-    
+
     def activity_fit_data(self, activity_id, include_power=True, include_hr=True):
         """
         Download the FIT file for a specific activity.
