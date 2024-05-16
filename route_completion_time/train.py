@@ -68,7 +68,7 @@ def train_and_evaluate_model(X_train, y_train, X_test, y_test, feature_names):
         "min_samples_leaf": [1, 2, 4],
     }
     grid_search = GridSearchCV(
-        model, model_param_grid, cv=5, scoring=make_scorer(r2_score)
+        model, model_param_grid, cv=5, scoring=make_scorer(r2_score), verbose=2
     )
     grid_search.fit(X_train, y_train)
     best_model = grid_search.best_estimator_
