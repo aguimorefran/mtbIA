@@ -1,13 +1,14 @@
 import argparse
 import datetime
 import os
-from io import BytesIO
+from io import BytesIO, StringIO
 
 import env
 import fitparse
 import numpy as np
 import pandas as pd
 import logging
+import sqlite3
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
@@ -27,8 +28,56 @@ WELLNESS_COLS = [
 SLOPE_CUTS = [-np.inf, -15, -1, 4, 8, 12, 20, np.inf]
 SLOPE_LABELS = ["dh_extreme", "dh", "green", "yellow", "orange", "red", "black"]
 SAVE_PATH = "data/activity_data.csv"
+DB_PATH = "data/activities.db"
 
 TODAY_DATE = datetime.date.today()
+
+
+def initialize_db(db_path):
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS activities (
+                activity_id TEXT PRIMARY KEY,
+                data BLOB
+            )
+        """
+        )
+        conn.commit()
+
+
+def load_activity_data(activity_id, db_path):
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT data FROM activities WHERE activity_id = ?", (activity_id,)
+        )
+        data = cursor.fetchone()
+        return data[0] if data else None
+
+
+def save_activity_data(activity_id, data, db_path):
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "INSERT OR REPLACE INTO activities (activity_id, data) VALUES (?, ?)",
+                (activity_id, data),
+            )
+            conn.commit()
+        except Exception as e:
+            logger.error("Error saving activity data: %s", e)
+
+
+def check_activity_data(activity_id, db_path):
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT activity_id FROM activities WHERE activity_id = ?", (activity_id,)
+        )
+        data = cursor.fetchone()
+        return data[0] if data else None
 
 
 def fetch_wellness(icu, start_date, end_date):
@@ -62,6 +111,10 @@ def process_wellness_data(df):
 def retrieve_activity_data(icu, activity_id):
     try:
         fit_bytes = icu.activity_fit_data(activity_id)
+        if not fit_bytes:
+            logger.error("No data received for activity %s", activity_id)
+            return pd.DataFrame()
+
         fitfile = fitparse.FitFile(BytesIO(fit_bytes))
 
         records = []
@@ -78,25 +131,36 @@ def retrieve_activity_data(icu, activity_id):
         return pd.DataFrame()
 
 
-def fetch_and_combine_activity_data(icu, activity_ids):
+def fetch_and_combine_activity_data(icu, activity_ids, db_path=DB_PATH):
     logger.info("Fetching activity data for %s activities", len(activity_ids))
     dfs = []
 
     for idx, activity_id in enumerate(activity_ids):
-        try:
-            result = retrieve_activity_data(icu, activity_id)
-        except Exception as e:
-            logger.error("Error fetching activity data for %s: %s", activity_id, e)
-            continue
-        if not result.empty:
+        data = load_activity_data(activity_id, db_path)
+        if data:
+            result = pd.read_json(StringIO(data))
             result["activity_id"] = activity_id
             result["hour_of_day"] = result["timestamp"].dt.hour
             dfs.append(result)
+        else:
+            try:
+                result = retrieve_activity_data(icu, activity_id)
+                if not result.empty:
+                    save_activity_data(activity_id, result.to_json(), db_path)
+                    result["activity_id"] = activity_id
+                    result["hour_of_day"] = result["timestamp"].dt.hour
+                    dfs.append(result)
+            except Exception as e:
+                logger.error("Error fetching activity data for %s: %s", activity_id, e)
+                continue
 
         if idx % (len(activity_ids) // 4) == 0:
             logger.info("Progress: %s/%s", 25 * (idx // (len(activity_ids) // 4)), 100)
 
-    return pd.concat(dfs, ignore_index=True)
+    if dfs:
+        return pd.concat(dfs, ignore_index=True)
+    else:
+        return pd.DataFrame()
 
 
 def summarize_activity_data(activity_df, wellness_df):
@@ -138,7 +202,7 @@ def summarize_activity_data(activity_df, wellness_df):
         diffs = activity_df["distance"].diff()
         slopes = np.where(diffs != 0, activity_df["altitude_diff"] / diffs * 100, 0)
         activity_df["slope"] = slopes
-        activity_df["slope"].fillna(0)
+        activity_df["slope"].fillna(0, inplace=True)
 
         initial_time = activity_df["timestamp"].iloc[0]
         activity_df["elapsed_time"] = (
@@ -226,11 +290,12 @@ def main(save_path=SAVE_PATH):
         args.start_date or env.START_DATE, "%d/%m/%Y"
     ).date()
     icu = Intervals(env.ATHLETE_ID, env.API_KEY)
+    initialize_db(DB_PATH)
     wellness_data = fetch_wellness(icu, start_date, datetime.date.today())
     activity_ids = [
         activity["id"] for activity in icu.activities(start_date, datetime.date.today())
     ]
-    activity_data = fetch_and_combine_activity_data(icu, activity_ids)
+    activity_data = fetch_and_combine_activity_data(icu, activity_ids, DB_PATH)
     summarized_data = summarize_activity_data(activity_data, wellness_data)
 
     if not os.path.exists(os.path.dirname(save_path)):
