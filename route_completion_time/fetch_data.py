@@ -159,8 +159,75 @@ def fetch_and_combine_activity_data(icu, activity_ids, db_path=DB_PATH):
 
     if dfs:
         return pd.concat(dfs, ignore_index=True)
-    else:
-        return pd.DataFrame()
+    return pd.DataFrame()
+
+
+def aggregate_activity(activity_df, wellness_df):
+    activity_df = (
+        activity_df.copy()
+    )  # Asegúrate de trabajar con una copia del DataFrame original
+    activity_df["timestamp"] = pd.to_datetime(activity_df["timestamp"])
+    activity_df.sort_values(by=["activity_id", "timestamp"], inplace=True)
+
+    activity_df["altitude_diff"] = activity_df["altitude"].diff().fillna(0)
+    diffs = activity_df["distance"].diff()
+    slopes = np.where(diffs != 0, activity_df["altitude_diff"] / diffs * 100, 0)
+    activity_df["slope"] = slopes
+    activity_df["slope"] = activity_df["slope"].fillna(0)
+
+    initial_time = activity_df["timestamp"].iloc[0]
+    activity_df["elapsed_time"] = (
+        activity_df["timestamp"] - initial_time
+    ).dt.total_seconds()
+
+    activity_df["slope_color"] = pd.cut(
+        activity_df["slope"], bins=SLOPE_CUTS, labels=SLOPE_LABELS
+    )
+
+    activity_df["date"] = activity_df["timestamp"].dt.date.astype(str)
+    wellness_df["date"] = wellness_df["date"].astype(str)
+    merged_df = pd.merge(activity_df, wellness_df, on="date", how="left")
+
+    agg_df = (
+        merged_df.groupby(["activity_id", "date"])
+        .agg(
+            {
+                "distance": "max",
+                "altitude_diff": lambda x: x[x > 0].sum(),
+                "elapsed_time": "max",
+                "hour_of_day": "first",
+                "atl_start": "first",
+                "ctl_start": "first",
+                "watt_kg": "first",
+                "temperature": "mean",
+            }
+        )
+        .reset_index()
+        .rename(
+            columns={
+                "altitude_diff": "elevation_gain",
+                "elapsed_time": "duration_seconds",
+                "temperature": "avg_temperature",
+                "distance": "distance_meters",
+            }
+        )
+    )
+
+    agg_df = agg_df.dropna()
+
+    df_slope_color = (
+        activity_df.groupby(["activity_id", "slope_color"], observed=False)
+        .agg(distance=("distance", "sum"))
+        .reset_index()
+    )
+    df_slope_color = df_slope_color.pivot(
+        index="activity_id", columns="slope_color", values="distance"
+    ).fillna(0)
+    df_slope_color = df_slope_color.div(df_slope_color.sum(axis=1), axis=0)
+    df_slope_color.columns = [f"{col}_pct" for col in df_slope_color.columns]
+    agg_df = pd.merge(agg_df, df_slope_color, on="activity_id", how="left")
+
+    return agg_df
 
 
 def summarize_activity_data(activity_df, wellness_df):
@@ -195,72 +262,21 @@ def summarize_activity_data(activity_df, wellness_df):
         return pd.DataFrame()
 
     try:
-        activity_df["timestamp"] = pd.to_datetime(activity_df["timestamp"])
-        activity_df.sort_values(by=["activity_id", "timestamp"], inplace=True)
+        aggregated_results = []
+        for activity_id in activity_df["activity_id"].unique():
+            activity_data = activity_df.loc[
+                activity_df["activity_id"] == activity_id
+            ].copy()
+            aggregated_activity = aggregate_activity(activity_data, wellness_df)
+            aggregated_results.append(aggregated_activity)
 
-        activity_df["altitude_diff"] = activity_df["altitude"].diff().fillna(0)
-        diffs = activity_df["distance"].diff()
-        slopes = np.where(diffs != 0, activity_df["altitude_diff"] / diffs * 100, 0)
-        activity_df["slope"] = slopes
-        activity_df["slope"].fillna(0, inplace=True)
-
-        initial_time = activity_df["timestamp"].iloc[0]
-        activity_df["elapsed_time"] = (
-            activity_df["timestamp"] - initial_time
-        ).dt.total_seconds()
-
-        activity_df["slope_color"] = pd.cut(
-            activity_df["slope"], bins=SLOPE_CUTS, labels=SLOPE_LABELS
-        )
-
-        activity_df["date"] = activity_df["timestamp"].dt.date.astype(str)
-        wellness_df["date"] = wellness_df["date"].astype(str)
-        agg_df = pd.merge(activity_df, wellness_df, on="date", how="left")
-
-        agg_df = (
-            agg_df.groupby(["activity_id", "date"])
-            .agg(
-                {
-                    "distance": "max",
-                    "altitude_diff": lambda x: x[x > 0].sum(),
-                    "elapsed_time": "max",
-                    "hour_of_day": "first",
-                    "atl_start": "first",
-                    "ctl_start": "first",
-                    "watt_kg": "first",
-                    "temperature": "mean",
-                }
-            )
-            .reset_index()
-            .rename(
-                columns={
-                    "altitude_diff": "elevation_gain",
-                    "elapsed_time": "duration_seconds",
-                    "temperature": "avg_temperature",
-                    "distance": "distance_meters",
-                }
-            )
-        )
-
-        agg_df = agg_df.dropna()
-
-        df_slope_color = (
-            activity_df.groupby(["activity_id", "slope_color"], observed=False)
-            .agg(distance=("distance", "sum"))
-            .reset_index()
-        )
-        df_slope_color = df_slope_color.pivot(
-            index="activity_id", columns="slope_color", values="distance"
-        ).fillna(0)
-        df_slope_color = df_slope_color.div(df_slope_color.sum(axis=1), axis=0)
-        df_slope_color.columns = [f"{col}_pct" for col in df_slope_color.columns]
-        agg_df = pd.merge(agg_df, df_slope_color, on="activity_id", how="left")
+        final_df = pd.concat(aggregated_results, ignore_index=True)
 
     except Exception as e:
         logger.error("Error summarizing activity data: %s", e)
         return pd.DataFrame()
 
-    return agg_df
+    return final_df
 
 
 def main(save_path=SAVE_PATH):
