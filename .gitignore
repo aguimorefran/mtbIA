@@ -1,3 +1,4 @@
 *.fit
 *.tcx
 env.py
+activities.db
