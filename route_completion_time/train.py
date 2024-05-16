@@ -11,6 +11,7 @@ from sklearn.metrics import (
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.decomposition import PCA
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -33,7 +34,7 @@ def ensure_directories():
 def save_metrics(path, metrics):
     df = pd.DataFrame([metrics])
     df.to_csv(path, index=False)
-    logging.info("Metrics saved successfully.")
+    logging.info("Metrics saved to %s", path)
 
 
 def process_data(data_path, predict_feature, ignore_columns):
@@ -58,37 +59,28 @@ def scale_and_decompose(X_train, X_test):
     return X_train_scaled, X_test_scaled
 
 
-def train_and_evaluate_model(X_train, y_train, X_test, y_test, feature_names):
+def train_and_evaluate_model(
+    X_train, y_train, X_test, y_test, feature_names, pca=False
+):
+    logging.info("Training model")
     model = RandomForestRegressor()
-
-    # model_param_grid = {
-    #     "n_estimators": [10, 50, 100, 200],
-    #     "max_depth": [None, 5, 10, 20],
-    #     "min_samples_split": [2, 5, 10],
-    #     "min_samples_leaf": [1, 2, 4],
-    # }
-    # grid_search = GridSearchCV(
-    #     model, model_param_grid, cv=5, scoring=make_scorer(r2_score), verbose=2
-    # )
-    # grid_search.fit(X_train, y_train)
-    # best_model = grid_search.best_estimator_
-
-    # print("Best model:", best_model)
-    # print("Best model params:", grid_search.best_params_)
-
-    max_depth = 20
-    min_samples_split = 5
-    min_samples_leaf = 1
-    n_estimators = 10
-
-    best_model = RandomForestRegressor(
-        max_depth=max_depth,
-        min_samples_split=min_samples_split,
-        min_samples_leaf=min_samples_leaf,
-        n_estimators=n_estimators,
+    model_param_grid = {
+        "n_estimators": [10, 50, 100, 200],
+        "max_depth": [None, 5, 10, 20],
+        "min_samples_split": [2, 5, 10],
+        "min_samples_leaf": [1, 2, 4],
+    }
+    grid_search = GridSearchCV(
+        model, model_param_grid, cv=5, scoring=make_scorer(r2_score), verbose=2
     )
 
-    best_model.fit(X_train, y_train)
+    if pca:
+        pca = PCA(n_components=PCA_VAR)
+        X_train = pca.fit_transform(X_train)
+        X_test = pca.transform(X_test)
+
+    grid_search.fit(X_train, y_train)
+    best_model = grid_search.best_estimator_
 
     y_pred = best_model.predict(X_test)
     r2 = r2_score(y_test, y_pred)
@@ -100,16 +92,16 @@ def train_and_evaluate_model(X_train, y_train, X_test, y_test, feature_names):
         name: importance for name, importance in zip(feature_names, feature_importances)
     }
 
-    print("R2 score:", r2)
-    print("Mean Absolute Error:", mae)
-    print("Mean Squared Error:", mse)
-
     metrics = {
         "r2_score": r2,
         "mean_absolute_error": mae,
         "mean_squared_error": mse,
         "feature_importances": feature_importance_dict,
     }
+
+    logging.info("Model trained. R2: %.2f, MAE: %.2f, MSE: %.2f", r2, mae, mse)
+    logging.info("Feature importances: %s", feature_importance_dict)
+    logging.info("Best model: %s", best_model)
 
     return metrics, best_model
 
@@ -124,7 +116,7 @@ def main():
     X_train_scaled, X_test_scaled = scale_and_decompose(X_train, X_test)
 
     metrics, model = train_and_evaluate_model(
-        X_train_scaled, y_train, X_test_scaled, y_test, feature_names
+        X_train_scaled, y_train, X_test_scaled, y_test, feature_names, pca=False
     )
 
     save_metrics(MODEL_METRICS_SAVE_PATH, metrics)
