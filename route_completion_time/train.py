@@ -20,6 +20,7 @@ logging.basicConfig(
 DATA_PATH = "data/activity_data.csv"
 MODEL_METRICS_SAVE_PATH = "data/model_metrics.csv"
 MODEL_SAVE_PATH = "models/route_completion_time.pkl"
+SCALER_SAVE_PATH = "models/scaler.pkl"
 
 PREDICT_FEATURE = "duration_seconds"
 IGNORE_COLUMNS = ["activity_id", "date"]
@@ -35,6 +36,12 @@ def save_metrics(path, metrics):
     df = pd.DataFrame([metrics])
     df.to_csv(path, index=False)
     logging.info("Metrics saved to %s", path)
+
+
+def save_scaler(path, scaler):
+    with open(path, "wb") as scaler_file:
+        pickle.dump(scaler, scaler_file)
+    logging.info("Scaler saved to %s", path)
 
 
 def process_data(data_path, predict_feature, ignore_columns):
@@ -56,7 +63,7 @@ def scale_and_decompose(X_train, X_test):
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
-    return X_train_scaled, X_test_scaled
+    return X_train_scaled, X_test_scaled, scaler
 
 
 def train_and_evaluate_model(
@@ -113,13 +120,14 @@ def main():
         DATA_PATH, PREDICT_FEATURE, IGNORE_COLUMNS
     )
     feature_names = X_train.columns.tolist()
-    X_train_scaled, X_test_scaled = scale_and_decompose(X_train, X_test)
+    X_train_scaled, X_test_scaled, scaler = scale_and_decompose(X_train, X_test)
 
     metrics, model = train_and_evaluate_model(
         X_train_scaled, y_train, X_test_scaled, y_test, feature_names, pca=False
     )
 
     save_metrics(MODEL_METRICS_SAVE_PATH, metrics)
+    save_scaler(SCALER_SAVE_PATH, scaler)
 
     with open(MODEL_SAVE_PATH, "wb") as model_file:
         pickle.dump(model, model_file)
