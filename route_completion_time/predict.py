@@ -11,7 +11,7 @@ from sklearn.preprocessing import StandardScaler
 import gpxpy
 import haversine as hs
 from fetch_data import WELLNESS_COLS, SLOPE_LABELS, SLOPE_CUTS
-from train import MODEL_SAVE_PATH
+from train import MODEL_SAVE_PATH, SCALER_SAVE_PATH
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
@@ -31,10 +31,13 @@ def read_gpx(gpx_path):
     return df
 
 
-def load_model(model_path):
+def load_model_scaler(model_path, scaler_path):
     with open(model_path, "rb") as f:
         model = pickle.load(f)
-    return model
+
+    with open(scaler_path, "rb") as f:
+        scaler = pickle.load(f)
+    return model, scaler
 
 
 def calculate_distance_slope(activity_df):
@@ -100,20 +103,42 @@ def aggregate_activity(activity_df):
             }
         )
         .to_frame()
-        .T
+        .T.rename(
+            columns={"distance": "distance_meters", "altitude_diff": "elevation_gain"}
+        )
     )
     df_slope_color = df_slope_color.set_index("slope_color").T
     df_slope_color.columns = [f"{col}_pct" for col in df_slope_color.columns]
     df_slope_color = df_slope_color.reset_index(drop=True)
 
     combined_df = pd.concat([activity_summary, df_slope_color], axis=1)
-    print(combined_df)
 
     return combined_df
 
 
 def main(gpx_path, hour_of_day, avg_temperature, watts, kilos, atl, ctl):
-    x = [
+
+    logger.info("Reading GPX file")
+    gpx_data = read_gpx(gpx_path)
+
+    logger.info("Loading model")
+    model, scaler = load_model_scaler(MODEL_SAVE_PATH, SCALER_SAVE_PATH)
+
+    logger.info("Processing wellness data")
+    wellness_data = pd.DataFrame(
+        {
+            "ctl_start": [ctl],
+            "atl_start": [atl],
+            "watt_kg": [watts / kilos],
+            "avg_temperature": [avg_temperature],
+            "hour_of_day": [hour_of_day],
+        }
+    )
+
+    df_aggregated = aggregate_activity(gpx_data)
+
+    x_pred = pd.concat([df_aggregated, wellness_data], axis=1)
+    order = [
         "distance_meters",
         "elevation_gain",
         "hour_of_day",
@@ -130,28 +155,24 @@ def main(gpx_path, hour_of_day, avg_temperature, watts, kilos, atl, ctl):
         "black_pct",
     ]
 
-    logger.info("Reading GPX file")
-    gpx_data = read_gpx(gpx_path)
+    x_pred = x_pred[order]
 
-    logger.info("Loading model")
-    model = load_model(MODEL_SAVE_PATH)
+    logger.info("Scaling data")
+    x_pred_scaled = scaler.transform(x_pred)
 
-    logger.info("Processing wellness data")
-    wellness_data = pd.DataFrame(
-        {
-            "ctl_start": [ctl],
-            "atl_start": [atl],
-            "watt_kg": [watts / kilos],
-        }
+    logger.info("Predicting completion time")
+    completion_time = model.predict(x_pred_scaled)
+    logger.info("Predicted completion time in seconds: %.2f", completion_time[0])
+    logger.info(
+        "Predict time formatted: %s",
+        str(datetime.timedelta(seconds=completion_time[0])),
     )
-
-    df_aggregated = aggregate_activity(gpx_data)
 
 
 if __name__ == "__main__":
     GPX_PATH = "data/gpx/test.gpx"
     TIME_OF_DAY = 12
-    AVG_TEMP = 15
+    AVG_TEMP = 25
     WATTS = 220
     KILOS = 90
     ATL = 50
