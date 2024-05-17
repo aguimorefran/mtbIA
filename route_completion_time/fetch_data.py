@@ -21,7 +21,6 @@ WELLNESS_COLS = [
     "atl",
     "ctl",
     "date",
-    "weight",
     "watt_kg",
 ]
 
@@ -132,6 +131,8 @@ def retrieve_activity_data(icu, activity_id):
 
 
 def fetch_and_combine_activity_data(icu, activity_ids, db_path=DB_PATH):
+    # TODO: CHECK IF ACTIVITY DAY BEFORE
+    # TODO: CHECK WEATHER
     logger.info("Fetching activity data for %s activities", len(activity_ids))
     dfs = []
 
@@ -163,15 +164,23 @@ def fetch_and_combine_activity_data(icu, activity_ids, db_path=DB_PATH):
 
 
 def aggregate_activity(activity_df, wellness_df):
-    activity_df = (
-        activity_df.copy()
-    )  # Asegúrate de trabajar con una copia del DataFrame original
+    activity_df = activity_df.copy()
     activity_df["timestamp"] = pd.to_datetime(activity_df["timestamp"])
     activity_df.sort_values(by=["activity_id", "timestamp"], inplace=True)
 
-    activity_df["altitude_diff"] = activity_df["altitude"].diff().fillna(0)
-    diffs = activity_df["distance"].diff()
-    slopes = np.where(diffs != 0, activity_df["altitude_diff"] / diffs * 100, 0)
+    activity_df["distance"] = activity_df["distance"].fillna(0)
+    activity_df["distance_diff"] = activity_df["distance"].diff().fillna(0)
+
+
+    slopes = np.where(
+        activity_df["distance_diff"] != 0,
+        (activity_df["altitude_diff"] / activity_df["distance_diff"]) * 100,
+        0,
+    )
+
+    max_slope = 100
+    slopes = np.clip(slopes, -max_slope, max_slope)
+
     activity_df["slope"] = slopes
     activity_df["slope"] = activity_df["slope"].fillna(0)
 
@@ -317,6 +326,8 @@ def main(save_path=SAVE_PATH):
     if not os.path.exists(os.path.dirname(save_path)):
         os.makedirs(os.path.dirname(save_path))
     summarized_data.to_csv(save_path, index=False)
+
+    logger.info("Data fetch complete")
 
 
 if __name__ == "__main__":

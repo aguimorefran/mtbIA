@@ -85,7 +85,7 @@ def aggregate_activity(activity_df):
     df_slope_color.columns = [f"{col}_pct" for col in df_slope_color.columns]
     df_slope_color = df_slope_color.reset_index(drop=True)
     combined_df = pd.concat([activity_summary, df_slope_color], axis=1)
-    return combined_df
+    return combined_df, activity_df
 
 
 def make_segment_predictions(
@@ -100,7 +100,7 @@ def make_segment_predictions(
         segment_data = gpx_data[gpx_data["distance"].cumsum() <= segment_distance]
         if segment_data.empty:
             break
-        df_aggregated = aggregate_activity(segment_data)
+        df_aggregated, activity_df = aggregate_activity(segment_data)
         wellness_data = pd.DataFrame(
             {
                 "ctl_start": [ctl],
@@ -133,6 +133,8 @@ def make_segment_predictions(
         total_seconds = int(completion_time[0])
 
         lat, long = segment_data.iloc[-1][["latitude", "longitude"]]
+        segment_distance = segment_data["distance"].sum()
+        avg_speed = segment_distance / total_seconds * 3.6  # Convert m/s to km/h
 
         predictions.append(
             {
@@ -140,10 +142,12 @@ def make_segment_predictions(
                 "time_seconds": total_seconds,
                 "latitude": lat,
                 "longitude": long,
+                "distance_meters": segment_distance,
+                "avg_speed_kmh": avg_speed,
             }
         )
 
-    return predictions
+    return predictions, activity_df
 
 
 def make_prediction(gpx_path, hour_of_day, avg_temperature, watts, kilos, atl, ctl):
@@ -153,15 +157,18 @@ def make_prediction(gpx_path, hour_of_day, avg_temperature, watts, kilos, atl, c
     model, scaler = load_model_scaler(MODEL_SAVE_PATH, SCALER_SAVE_PATH)
     logger.info("Calculating distances and slopes")
     gpx_data = calculate_distance_slope(gpx_data)
-    segment_times = make_segment_predictions(
+    segment_times, activity_df = make_segment_predictions(
         gpx_data, model, scaler, hour_of_day, avg_temperature, watts, kilos, atl, ctl
     )
 
     result_df = pd.DataFrame(segment_times)
 
-    return result_df
+    return result_df, activity_df
 
 
 if __name__ == "__main__":
-    result = make_prediction("data/gpx/test.gpx", 10, 15, 220, 80, 50, 50)
-    print(result)
+    result_df, activity_df = make_prediction(
+        "data/gpx/test.gpx", 10, 15, 220, 80, 50, 50
+    )
+    print(result_df)
+    print(activity_df.head())

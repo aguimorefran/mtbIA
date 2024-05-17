@@ -6,3 +6,8 @@ pandas
 datetime
 matplotlib
 scikit-learn
+haversine
+gpxpy
+streamlit
+streamlit_folium
+folium
