@@ -1,37 +1,38 @@
 import logging
-import pandas as pd
 import numpy as np
+import pandas as pd
 import pickle
 import gpxpy
+import os
 import haversine as hs
 from fetch_data import SLOPE_LABELS, SLOPE_CUTS
-from train import MODEL_SAVE_PATH, SCALER_SAVE_PATH
+from train import MODEL_METRICS_SAVE_PATH, MODELS_SAVE_PATH, SCALER_SAVE_PATH
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 
-
 def read_gpx(gpx_path):
-    gpx_file = open(gpx_path, "r")
-    gpx = gpxpy.parse(gpx_file)
-    data = []
-    for track in gpx.tracks:
-        for segment in track.segments:
-            for point in segment.points:
-                data.append(
-                    [point.latitude, point.longitude, point.elevation, point.time]
-                )
+    with open(gpx_path, "r") as gpx_file:
+        gpx = gpxpy.parse(gpx_file)
+        data = []
+        for track in gpx.tracks:
+            for segment in track.segments:
+                for point in segment.points:
+                    data.append(
+                        [point.latitude, point.longitude, point.elevation, point.time]
+                    )
     df = pd.DataFrame(data, columns=["latitude", "longitude", "altitude", "time"])
     return df
 
-
-def load_model_scaler(model_path, scaler_path):
-    with open(model_path, "rb") as f:
-        model = pickle.load(f)
+def load_models_and_scaler(models_dir, scaler_path):
+    models = {}
+    for model_name in ["RandomForest", "Lasso", "Ridge"]:
+        model_path = os.path.join(models_dir, f"{model_name}_model.pkl")
+        with open(model_path, "rb") as f:
+            models[model_name] = pickle.load(f)
     with open(scaler_path, "rb") as f:
         scaler = pickle.load(f)
-    return model, scaler
-
+    return models, scaler
 
 def calculate_distance_slope(activity_df):
     activity_df = activity_df.copy()
@@ -52,8 +53,14 @@ def calculate_distance_slope(activity_df):
     activity_df["slope"] = slopes
     activity_df["slope"] = activity_df["slope"].fillna(0)
     activity_df["distance_diff"] = activity_df["distance"].diff().fillna(0)
-    return activity_df
 
+    # Map slopes to colors
+    activity_df["slope_color"] = pd.cut(activity_df["slope"], bins=SLOPE_CUTS, labels=SLOPE_LABELS)
+
+    # Accumulated distance
+    activity_df["distance_accumulated"] = activity_df["distance"].cumsum()
+
+    return activity_df
 
 def aggregate_activity(activity_df):
     logger.info("Aggregating activity data")
@@ -85,22 +92,26 @@ def aggregate_activity(activity_df):
     df_slope_color.columns = [f"{col}_pct" for col in df_slope_color.columns]
     df_slope_color = df_slope_color.reset_index(drop=True)
     combined_df = pd.concat([activity_summary, df_slope_color], axis=1)
-    return combined_df, activity_df
+    return combined_df
 
+def make_predictions(gpx_path, hour_of_day, avg_temperature, watts, kilos, atl, ctl):
+    logger.info("Reading GPX file")
+    gpx_data = read_gpx(gpx_path)
+    logger.info("Loading models and scaler")
+    models, scaler = load_models_and_scaler(MODELS_SAVE_PATH, SCALER_SAVE_PATH)
+    logger.info("Calculating distances and slopes")
+    gpx_data = calculate_distance_slope(gpx_data)
 
-def make_segment_predictions(
-    gpx_data, model, scaler, hour_of_day, avg_temperature, watts, kilos, atl, ctl
-):
     total_distance = gpx_data["distance"].sum()
     segments = [0.25, 0.50, 0.75, 1.0]
     segment_distances = [total_distance * segment for segment in segments]
 
     predictions = []
-    for segment_distance in segment_distances:
+
+    for i, segment_distance in enumerate(segment_distances):
         segment_data = gpx_data[gpx_data["distance"].cumsum() <= segment_distance]
-        if segment_data.empty:
-            break
-        df_aggregated, activity_df = aggregate_activity(segment_data)
+        df_aggregated = aggregate_activity(segment_data)
+        logger.info("Aggregated activity data for segment %d", i + 1)
         wellness_data = pd.DataFrame(
             {
                 "ctl_start": [ctl],
@@ -129,46 +140,36 @@ def make_segment_predictions(
         ]
         x_pred = x_pred[order]
         x_pred_scaled = scaler.transform(x_pred)
-        completion_time = model.predict(x_pred_scaled)
-        total_seconds = int(completion_time[0])
 
-        lat, long = segment_data.iloc[-1][["latitude", "longitude"]]
-        segment_distance = segment_data["distance"].sum()
-        avg_speed = segment_distance / total_seconds * 3.6  # Convert m/s to km/h
+        for model_name, model in models.items():
+            logger.info("Predicting completion time for segment %d with %s model", i + 1, model_name)
+            completion_time = model.predict(x_pred_scaled)
+            total_seconds = int(completion_time[0])
+            hours, remainder = divmod(total_seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            formatted_time = "{:02}:{:02}:{:02}".format(hours, minutes, seconds)
 
-        predictions.append(
-            {
-                "quarter": f"q{len(predictions) + 1}",
-                "time_seconds": total_seconds,
-                "latitude": lat,
-                "longitude": long,
-                "distance_meters": segment_distance,
-                "avg_speed_kmh": avg_speed,
-            }
-        )
+            predictions.append({
+                "quart": f"0-{int((i + 1) * 25)}%",
+                "model": model_name,
+                "prediction_seconds": total_seconds,
+                "prediction_parsed": formatted_time,
+            })
 
-    return predictions, activity_df
+            logger.info("%s model predicted completion time for segment %d in seconds: %d", model_name, i + 1, total_seconds)
+            logger.info("%s model predicted completion time for segment %d formatted: %s", model_name, i + 1, formatted_time)
 
+    metrics_df = pd.read_csv(MODEL_METRICS_SAVE_PATH)
+    prediction_df = pd.DataFrame(predictions)
+    result_df = pd.merge(metrics_df, prediction_df, on="model")
 
-def make_prediction(gpx_path, hour_of_day, avg_temperature, watts, kilos, atl, ctl):
-    logger.info("Reading GPX file")
-    gpx_data = read_gpx(gpx_path)
-    logger.info("Loading model")
-    model, scaler = load_model_scaler(MODEL_SAVE_PATH, SCALER_SAVE_PATH)
-    logger.info("Calculating distances and slopes")
-    gpx_data = calculate_distance_slope(gpx_data)
-    segment_times, activity_df = make_segment_predictions(
-        gpx_data, model, scaler, hour_of_day, avg_temperature, watts, kilos, atl, ctl
-    )
-
-    result_df = pd.DataFrame(segment_times)
-
-    return result_df, activity_df
-
+    return result_df, gpx_data
 
 if __name__ == "__main__":
-    result_df, activity_df = make_prediction(
-        "data/gpx/test.gpx", 10, 15, 220, 80, 50, 50
+    result_df, gpx_data = make_predictions(
+        "data/gpx/test.gpx", 10, 15, 250, 80, 50, 50
     )
+    print("Predictions and Metrics:")
     print(result_df)
-    print(activity_df.head())
+    print("GPX Data with Slopes and Colors:")
+    print(gpx_data)
