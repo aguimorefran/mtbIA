@@ -11,7 +11,7 @@ from sklearn.metrics import (
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.decomposition import PCA
+from sklearn.linear_model import Lasso, Ridge
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -19,23 +19,31 @@ logging.basicConfig(
 
 DATA_PATH = "data/activity_data.csv"
 MODEL_METRICS_SAVE_PATH = "data/model_metrics.csv"
-MODEL_SAVE_PATH = "models/route_completion_time.pkl"
+MODELS_SAVE_PATH = "models/"
 SCALER_SAVE_PATH = "models/scaler.pkl"
 
 PREDICT_FEATURE = "duration_seconds"
 IGNORE_COLUMNS = ["activity_id", "date"]
-PCA_VAR = 0.99
 
 
 def ensure_directories():
     os.makedirs(os.path.dirname(MODEL_METRICS_SAVE_PATH), exist_ok=True)
-    os.makedirs(os.path.dirname(MODEL_SAVE_PATH), exist_ok=True)
+    os.makedirs(MODELS_SAVE_PATH, exist_ok=True)
 
 
 def save_metrics(path, metrics):
-    df = pd.DataFrame([metrics])
+    df = pd.DataFrame(metrics)
+    if os.path.exists(path):
+        df_existing = pd.read_csv(path)
+        df = pd.concat([df_existing, df], ignore_index=True)
     df.to_csv(path, index=False)
     logging.info("Metrics saved to %s", path)
+
+
+def save_model(path, model):
+    with open(path, "wb") as model_file:
+        pickle.dump(model, model_file)
+    logging.info("Model saved to %s", path)
 
 
 def save_scaler(path, scaler):
@@ -66,51 +74,60 @@ def scale_and_decompose(X_train, X_test):
     return X_train_scaled, X_test_scaled, scaler
 
 
-def train_and_evaluate_model(
-    X_train, y_train, X_test, y_test, feature_names, pca=False
-):
-    logging.info("Training model")
-    model = RandomForestRegressor()
-    model_param_grid = {
-        "n_estimators": [10, 50, 100, 200],
-        "max_depth": [None, 5, 10, 20],
-        "min_samples_split": [2, 5, 10],
-        "min_samples_leaf": [1, 2, 4],
-    }
-    grid_search = GridSearchCV(
-        model, model_param_grid, cv=5, scoring=make_scorer(r2_score), verbose=2
-    )
-
-    if pca:
-        pca = PCA(n_components=PCA_VAR)
-        X_train = pca.fit_transform(X_train)
-        X_test = pca.transform(X_test)
-
-    grid_search.fit(X_train, y_train)
-    best_model = grid_search.best_estimator_
-
-    y_pred = best_model.predict(X_test)
-    r2 = r2_score(y_test, y_pred)
-    mae = mean_absolute_error(y_test, y_pred)
-    mse = mean_squared_error(y_test, y_pred)
-
-    feature_importances = best_model.feature_importances_
-    feature_importance_dict = {
-        name: importance for name, importance in zip(feature_names, feature_importances)
+def train_and_evaluate_model(X_train, y_train, X_test, y_test):
+    models = {
+        "RandomForest": RandomForestRegressor(),
+        "Lasso": Lasso(),
+        "Ridge": Ridge(),
     }
 
-    metrics = {
-        "r2_score": r2,
-        "mean_absolute_error": mae,
-        "mean_squared_error": mse,
-        "feature_importances": feature_importance_dict,
+    param_grids = {
+        "RandomForest": {
+            "n_estimators": [50, 100],
+            "max_depth": [None, 10],
+        },
+        "Lasso": {
+            "alpha": [0.1, 1, 10],
+            "max_iter": [1000, 5000],
+        },
+        "Ridge": {
+            "alpha": [0.1, 1, 10],
+            "max_iter": [1000, 5000],
+        },
     }
 
-    logging.info("Model trained. R2: %.2f, MAE: %.2f, MSE: %.2f", r2, mae, mse)
-    logging.info("Feature importances: %s", feature_importance_dict)
-    logging.info("Best model: %s", best_model)
+    best_models = {}
+    all_metrics = []
 
-    return metrics, best_model
+    for model_name, model in models.items():
+        logging.info("Training %s model", model_name)
+        grid_search = GridSearchCV(
+            model, param_grids[model_name], cv=5, scoring=make_scorer(r2_score)
+        )
+        grid_search.fit(X_train, y_train)
+        best_model = grid_search.best_estimator_
+
+        y_pred = best_model.predict(X_test)
+        r2 = r2_score(y_test, y_pred)
+        mae = mean_absolute_error(y_test, y_pred)
+        mse = mean_squared_error(y_test, y_pred)
+
+        metrics = {
+            "model": model_name,
+            "r2_score": r2,
+            "mean_absolute_error": mae,
+            "mean_squared_error": mse,
+        }
+
+        logging.info(
+            "%s trained. R2: %.2f, MAE: %.2f, MSE: %.2f", model_name, r2, mae, mse
+        )
+        logging.info("Best model: %s", best_model)
+
+        all_metrics.append(metrics)
+        best_models[model_name] = best_model
+
+    return all_metrics, best_models
 
 
 def main():
@@ -122,16 +139,16 @@ def main():
     feature_names = X_train.columns.tolist()
     X_train_scaled, X_test_scaled, scaler = scale_and_decompose(X_train, X_test)
 
-    metrics, model = train_and_evaluate_model(
-        X_train_scaled, y_train, X_test_scaled, y_test, feature_names, pca=False
+    metrics, models = train_and_evaluate_model(
+        X_train_scaled, y_train, X_test_scaled, y_test
     )
 
     save_metrics(MODEL_METRICS_SAVE_PATH, metrics)
     save_scaler(SCALER_SAVE_PATH, scaler)
 
-    with open(MODEL_SAVE_PATH, "wb") as model_file:
-        pickle.dump(model, model_file)
-    logging.info("Model saved successfully.")
+    for model_name, model in models.items():
+        model_path = os.path.join(MODELS_SAVE_PATH, f"{model_name}_model.pkl")
+        save_model(model_path, model)
 
 
 if __name__ == "__main__":
