@@ -68,4 +68,4 @@ if st.button("Process"):
         )
 
         st.dataframe(prediction_df.sort_values("r2_score", ascending=False))
-        # display_map(prediction_df, activity_df)
+        display_map(prediction_df, activity_df)

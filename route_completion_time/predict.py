@@ -57,11 +57,7 @@ def calculate_distance_slope(activity_df):
     activity_df["slope"] = slopes
     activity_df["slope"] = activity_df["slope"].fillna(0)
     activity_df["distance_diff"] = activity_df["distance"].diff().fillna(0)
-
-    # Map slopes to colors
     activity_df["slope_color"] = pd.cut(activity_df["slope"], bins=SLOPE_CUTS, labels=SLOPE_LABELS)
-
-    # Accumulated distance
     activity_df["distance_accumulated"] = activity_df["distance"].cumsum()
 
     return activity_df
@@ -161,6 +157,9 @@ def make_predictions(gpx_path, hour_of_day, avg_temperature, watts, kilos, atl, 
                 "prediction_seconds": total_seconds,
                 "prediction_parsed": formatted_time,
                 "avg_speed_kmh": avg_speed_kmh,
+                "lat": segment_data["latitude"].iloc[-1],
+                "lon": segment_data["longitude"].iloc[-1],
+                "distance": segment_distance,
             })
 
             logger.info("%s model predicted completion time for segment %d in seconds: %d", model_name, i + 1, total_seconds)
@@ -169,6 +168,10 @@ def make_predictions(gpx_path, hour_of_day, avg_temperature, watts, kilos, atl, 
     metrics_df = pd.read_csv(MODEL_METRICS_SAVE_PATH)
     prediction_df = pd.DataFrame(predictions)
     result_df = pd.merge(metrics_df, prediction_df, on="model")
+
+    # Keep model with latest timestamp
+    latest_timestamp = result_df["timestamp"].max()
+    result_df = result_df[result_df["timestamp"] == latest_timestamp]
 
     return result_df, gpx_data
 

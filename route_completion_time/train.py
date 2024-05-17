@@ -33,6 +33,7 @@ def ensure_directories():
 
 def save_metrics(path, metrics):
     df = pd.DataFrame(metrics)
+    df["timestamp"] = pd.Timestamp.now()
     if os.path.exists(path):
         df_existing = pd.read_csv(path)
         df = pd.concat([df_existing, df], ignore_index=True)
