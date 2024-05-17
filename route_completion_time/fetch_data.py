@@ -33,17 +33,21 @@ TODAY_DATE = datetime.date.today()
 
 
 def initialize_db(db_path):
-    with sqlite3.connect(db_path) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
+    if not os.path.exists(os.path.dirname(db_path)):
+        os.makedirs(os.path.dirname(db_path))
+
+    if not os.path.exists(db_path):
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS activities (
+                    activity_id TEXT PRIMARY KEY,
+                    data BLOB
+                )
             """
-            CREATE TABLE IF NOT EXISTS activities (
-                activity_id TEXT PRIMARY KEY,
-                data BLOB
             )
-        """
-        )
-        conn.commit()
+            conn.commit()
 
 
 def load_activity_data(activity_id, db_path):
@@ -170,7 +174,7 @@ def aggregate_activity(activity_df, wellness_df):
 
     activity_df["distance"] = activity_df["distance"].fillna(0)
     activity_df["distance_diff"] = activity_df["distance"].diff().fillna(0)
-
+    activity_df["altitude_diff"] = activity_df["altitude"].diff().fillna(0)
 
     slopes = np.where(
         activity_df["distance_diff"] != 0,

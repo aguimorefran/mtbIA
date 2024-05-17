@@ -12,17 +12,21 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 
 def read_gpx(gpx_path):
-    with open(gpx_path, "r") as gpx_file:
-        gpx = gpxpy.parse(gpx_file)
-        data = []
-        for track in gpx.tracks:
-            for segment in track.segments:
-                for point in segment.points:
-                    data.append(
-                        [point.latitude, point.longitude, point.elevation, point.time]
-                    )
-    df = pd.DataFrame(data, columns=["latitude", "longitude", "altitude", "time"])
-    return df
+    try:
+        with open(gpx_path, "rb") as gpx_file:
+            gpx = gpxpy.parse(gpx_file)
+            data = []
+            for track in gpx.tracks:
+                for segment in track.segments:
+                    for point in segment.points:
+                        data.append(
+                            [point.latitude, point.longitude, point.elevation, point.time]
+                        )
+        df = pd.DataFrame(data, columns=["latitude", "longitude", "altitude", "time"])
+        return df
+    except Exception as e:
+        logger.error("Failed to read GPX file: %s", e)
+        raise
 
 def load_models_and_scaler(models_dir, scaler_path):
     models = {}
@@ -148,12 +152,15 @@ def make_predictions(gpx_path, hour_of_day, avg_temperature, watts, kilos, atl, 
             hours, remainder = divmod(total_seconds, 3600)
             minutes, seconds = divmod(remainder, 60)
             formatted_time = "{:02}:{:02}:{:02}".format(hours, minutes, seconds)
+            avg_speed_ms = segment_distance / total_seconds
+            avg_speed_kmh = avg_speed_ms * 3.6
 
             predictions.append({
                 "quart": f"0-{int((i + 1) * 25)}%",
                 "model": model_name,
                 "prediction_seconds": total_seconds,
                 "prediction_parsed": formatted_time,
+                "avg_speed_kmh": avg_speed_kmh,
             })
 
             logger.info("%s model predicted completion time for segment %d in seconds: %d", model_name, i + 1, total_seconds)
