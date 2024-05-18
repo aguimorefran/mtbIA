@@ -333,6 +333,8 @@ def main(save_path=SAVE_PATH):
 
     logger.info("Data fetch complete")
 
+    return summarized_data
+
 
 if __name__ == "__main__":
     main()

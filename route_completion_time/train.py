@@ -34,9 +34,6 @@ def ensure_directories():
 def save_metrics(path, metrics):
     df = pd.DataFrame(metrics)
     df["timestamp"] = pd.Timestamp.now()
-    if os.path.exists(path):
-        df_existing = pd.read_csv(path)
-        df = pd.concat([df_existing, df], ignore_index=True)
     df.to_csv(path, index=False)
     logging.info("Metrics saved to %s", path)
 
@@ -150,6 +147,9 @@ def main():
     for model_name, model in models.items():
         model_path = os.path.join(MODELS_SAVE_PATH, f"{model_name}_model.pkl")
         save_model(model_path, model)
+
+    # Return the metrics and models
+    return metrics, models, feature_names, total_rows
 
 
 if __name__ == "__main__":

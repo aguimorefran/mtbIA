@@ -1,7 +1,20 @@
 import streamlit as st
 import tempfile
 from predict import make_predictions
+from fetch_data import main as fetch_data_main
+from train import main as train_main, MODEL_METRICS_SAVE_PATH
 from map import display_map
+import pandas as pd
+
+def load_model_metrics():
+    try:
+        model_metrics = pd.read_csv(MODEL_METRICS_SAVE_PATH)
+    except FileNotFoundError:
+        st.warning("No model metrics found. Please train a model first.")
+        return None
+    # Return which row hast max r2_score
+    return model_metrics[model_metrics["r2_score"] == model_metrics["r2_score"].max()]
+
 
 ATL_INIT = 50
 CTL_INIT = 50
@@ -29,8 +42,19 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+####################################################################################
+
 st.title("MTB - IA")
 st.write("Predict the completion time for your mountain bike rides")
+
+model_metrics = load_model_metrics()
+if model_metrics is not None:
+    st.write("Best model metrics:")
+    st.write("R2 Score:", model_metrics["r2_score"].values[0])
+    st.write("Mean Absolute Error:", model_metrics["mean_absolute_error"].values[0])
+    st.write("Mean Squared Error:", model_metrics["mean_squared_error"].values[0])
+    st.write("Model:", model_metrics["model"].values[0])
+    st.write("Trained on:", model_metrics["timestamp"].values[0])
 
 st.sidebar.title("Input Parameters")
 
@@ -53,6 +77,18 @@ mean_temp = st.sidebar.number_input(
     "Mean Temperature (°C)", min_value=-20, max_value=50, value=MEAN_TEMP_C_INIT
 )
 
+####################################################################################
+
+# Button for fetching data
+
+if st.button("Fetch Data"):
+    fetch_data_main()
+
+if st.button("Train Model"):
+    train_main()
+
+####################################################################################
+
 uploaded_file = st.file_uploader("Choose a GPX file", type="gpx")
 
 if st.button("Process"):
@@ -67,5 +103,5 @@ if st.button("Process"):
             temp_file_path, TIME_OF_DAY_INIT, mean_temp, FTP, Weight, atl, ctl
         )
 
-        st.dataframe(prediction_df.sort_values("r2_score", ascending=False))
+        st.dataframe(prediction_df[prediction_df["r2_score"] == prediction_df["r2_score"].max()])
         display_map(prediction_df, activity_df)
