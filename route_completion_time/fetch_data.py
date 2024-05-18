@@ -22,6 +22,8 @@ WELLNESS_COLS = [
     "ctl",
     "date",
     "watt_kg",
+    "weight",
+    "eftp"
 ]
 
 SLOPE_CUTS = [-np.inf, -15, -1, 4, 8, 12, 20, np.inf]
@@ -135,8 +137,7 @@ def retrieve_activity_data(icu, activity_id):
 
 
 def fetch_and_combine_activity_data(icu, activity_ids, db_path=DB_PATH):
-    # TODO: CHECK IF ACTIVITY DAY BEFORE
-    # TODO: CHECK WEATHER
+    # TODO: GET POWER CURVE
     logger.info("Fetching activity data for %s activities", len(activity_ids))
     dfs = []
 
@@ -330,6 +331,7 @@ def main(save_path=SAVE_PATH):
     if not os.path.exists(os.path.dirname(save_path)):
         os.makedirs(os.path.dirname(save_path))
     summarized_data.to_csv(save_path, index=False)
+
 
     logger.info("Data fetch complete")
 

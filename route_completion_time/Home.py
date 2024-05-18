@@ -1,10 +1,14 @@
+import datetime
+
 import streamlit as st
 import tempfile
 from predict import make_predictions
-from fetch_data import main as fetch_data_main
+from fetch_data import main as fetch_data_main, fetch_wellness
 from train import main as train_main, MODEL_METRICS_SAVE_PATH
 from map import display_map
 import pandas as pd
+import env
+from intervals import Intervals
 
 def load_model_metrics():
     try:
@@ -15,12 +19,25 @@ def load_model_metrics():
     # Return which row hast max r2_score
     return model_metrics[model_metrics["r2_score"] == model_metrics["r2_score"].max()]
 
+def get_last_wellness():
+    start_date = datetime.datetime.strptime(env.START_DATE, "%d/%m/%Y").date()
+    today = datetime.date.today()
+    icu = Intervals(env.ATHLETE_ID, env.API_KEY)
+    try:
+        wellness = fetch_wellness(icu, start_date, today)
+        return wellness
+    except FileNotFoundError:
+        st.warning("No wellness data found. Please fetch wellness data first.")
+        return None
 
-ATL_INIT = 50
-CTL_INIT = 50
-FTP_INIT = 220
-WEIGHT_KG_INIT = 80
-MEAN_TEMP_C_INIT = 15
+# Get last row
+wellness = get_last_wellness().iloc[-1]
+
+ATL_INIT = int(wellness["atl"])
+CTL_INIT = int(wellness["ctl"])
+FTP_INIT = int(wellness["eftp"])
+WEIGHT_KG_INIT = int(wellness["weight"])
+MEAN_TEMP_C_INIT = 20
 TIME_OF_DAY_INIT = 10
 
 # Set page config to wide
@@ -48,6 +65,7 @@ st.title("MTB - IA")
 st.write("Predict the completion time for your mountain bike rides")
 
 model_metrics = load_model_metrics()
+
 if model_metrics is not None:
     st.write("Best model metrics:")
     st.write("R2 Score:", model_metrics["r2_score"].values[0])
