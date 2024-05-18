@@ -94,9 +94,13 @@ def aggregate_activity(activity_df):
     combined_df = pd.concat([activity_summary, df_slope_color], axis=1)
     return combined_df
 
-def make_predictions(gpx_path, hour_of_day, avg_temperature, watts, kilos, atl, ctl):
+def make_predictions(gpx_path, hour_of_day, avg_temperature, watts, kilos, atl, ctl, reverse=False):
     logger.info("Reading GPX file")
     gpx_data = read_gpx(gpx_path)
+
+    if reverse:
+        gpx_data = gpx_data.iloc[::-1].reset_index(drop=True)
+
     logger.info("Loading models and scaler")
     models, scaler = load_models_and_scaler(MODELS_SAVE_PATH, SCALER_SAVE_PATH)
     logger.info("Calculating distances and slopes")

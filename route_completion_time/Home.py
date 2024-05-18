@@ -39,6 +39,7 @@ FTP_INIT = int(wellness["eftp"])
 WEIGHT_KG_INIT = int(wellness["weight"])
 MEAN_TEMP_C_INIT = 20
 TIME_OF_DAY_INIT = 10
+REVERSE_GPX = False
 
 # Set page config to wide
 st.set_page_config(page_title="MTB - IA", page_icon=":mountain_bicyclist:", layout="wide")
@@ -95,6 +96,9 @@ mean_temp = st.sidebar.number_input(
     "Mean Temperature (°C)", min_value=-20, max_value=50, value=MEAN_TEMP_C_INIT
 )
 
+# Toggle for reverse
+REVERSE_GPX = st.sidebar.checkbox("Reverse GPX", REVERSE_GPX)
+
 ####################################################################################
 
 # Button for fetching data
@@ -118,7 +122,7 @@ if st.button("Process"):
         temp_file_path = t_file.name
 
         prediction_df, activity_df = make_predictions(
-            temp_file_path, TIME_OF_DAY_INIT, mean_temp, FTP, Weight, atl, ctl
+            temp_file_path, TIME_OF_DAY_INIT, mean_temp, FTP, Weight, atl, ctl, REVERSE_GPX
         )
 
         st.dataframe(prediction_df[prediction_df["r2_score"] == prediction_df["r2_score"].max()])
