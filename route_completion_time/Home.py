@@ -1,12 +1,13 @@
 import datetime
-
+import threading
+import time
 import streamlit as st
 import tempfile
+import pandas as pd
 from predict import make_predictions
 from fetch_data import main as fetch_data_main, fetch_wellness
 from train import main as train_main, MODEL_METRICS_SAVE_PATH
 from map import display_map
-import pandas as pd
 import env
 from intervals import Intervals
 
@@ -16,7 +17,7 @@ def load_model_metrics():
     except FileNotFoundError:
         st.warning("No model metrics found. Please train a model first.")
         return None
-    # Return which row hast max r2_score
+    # Return which row has max r2_score
     return model_metrics[model_metrics["r2_score"] == model_metrics["r2_score"].max()]
 
 def get_last_wellness():
@@ -59,6 +60,18 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
+def check_and_run_tasks():
+    while True:
+        now = datetime.datetime.now()
+        if now.hour == 0 and now.minute == 0:
+            fetch_data_main()
+            train_main()
+            time.sleep(60)
+        time.sleep(60)
+
+# Start the background thread
+threading.Thread(target=check_and_run_tasks, daemon=True).start()
 
 ####################################################################################
 
@@ -104,10 +117,15 @@ REVERSE_GPX = st.sidebar.checkbox("Reverse GPX", REVERSE_GPX)
 # Button for fetching data
 
 if st.button("Fetch Data"):
-    fetch_data_main()
+    pbar_fetch = st.progress(0)
+    message = st.empty()
+    fetch_data_main(st_pbar=pbar_fetch, st_message=message)
+
 
 if st.button("Train Model"):
-    train_main()
+    pb = st.progress(0)
+    message = st.empty()
+    train_main(st_pbar=pb, st_message=message)
 
 ####################################################################################
 

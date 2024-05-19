@@ -130,15 +130,25 @@ def train_and_evaluate_model(X_train, y_train, X_test, y_test):
     return all_metrics, best_models
 
 
-def main():
+def main(st_pbar=None, st_message=None):
     ensure_directories()
 
+    if st_pbar and st_message:
+        st_pbar.progress(10)
+        st_message.text("Processing data...")
     X_train, X_test, y_train, y_test, total_rows = process_data(
         DATA_PATH, PREDICT_FEATURE, IGNORE_COLUMNS
     )
     feature_names = X_train.columns.tolist()
+
+    if st_pbar and st_message:
+        st_pbar.progress(30)
+        st_message.text("Scaling and decomposing data...")
     X_train_scaled, X_test_scaled, scaler = scale_and_decompose(X_train, X_test)
 
+    if st_pbar and st_message:
+        st_pbar.progress(60)
+        st_message.text("Training and evaluating models...")
     metrics, models = train_and_evaluate_model(
         X_train_scaled, y_train, X_test_scaled, y_test
     )
@@ -149,6 +159,10 @@ def main():
     for model_name, model in models.items():
         model_path = os.path.join(MODELS_SAVE_PATH, f"{model_name}_model.pkl")
         save_model(model_path, model)
+
+    if st_pbar and st_message:
+        st_pbar.progress(100)
+        st_message.text("Training complete.")
 
     # Return the metrics and models
     return metrics, models, feature_names, total_rows

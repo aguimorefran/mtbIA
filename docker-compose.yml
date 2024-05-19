@@ -8,17 +8,3 @@ services:
     volumes:
       - .:/app
     container_name: streamlit_app
-
-  cron_fetch:
-    image: python:3.11-slim
-    volumes:
-      - .:/app
-    container_name: cron_fetch
-    entrypoint: ["/bin/sh", "-c", "echo '0 0 * * * cd /app/route_completion_time && python fetch_data.py' | crontab - && cron -f"]
-
-  cron_train:
-    image: python:3.11-slim
-    volumes:
-      - .:/app
-    container_name: cron_train
-    entrypoint: ["/bin/sh", "-c", "echo '0 0 * * * cd /app/route_completion_time && python train.py' | crontab - && cron -f"]

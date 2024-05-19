@@ -293,8 +293,11 @@ def summarize_activity_data(activity_df, wellness_df):
     return final_df
 
 
-def main(save_path=SAVE_PATH):
+def main(save_path=SAVE_PATH, st_pbar=None, st_message=None):
     logger.info("Starting data fetch")
+    if st_pbar and st_message:
+        st_pbar.progress(0)
+        st_message.text("Fetching wellness data")
     parser = argparse.ArgumentParser(description="Fetch wellness and activity data")
     parser.add_argument(
         "--start_date",
@@ -319,18 +322,33 @@ def main(save_path=SAVE_PATH):
     start_date = datetime.datetime.strptime(
         args.start_date or env.START_DATE, "%d/%m/%Y"
     ).date()
+
     icu = Intervals(env.ATHLETE_ID, env.API_KEY)
     initialize_db(DB_PATH)
     wellness_data = fetch_wellness(icu, start_date, datetime.date.today())
+
+
     activity_ids = [
         activity["id"] for activity in icu.activities(start_date, datetime.date.today())
     ]
+
+    if st_pbar and st_message:
+        st_pbar.progress(50)
+        st_message.text("Fetching and processing activity data")
     activity_data = fetch_and_combine_activity_data(icu, activity_ids, DB_PATH)
+
+    if st_pbar and st_message:
+        st_pbar.progress(75)
+        st_message.text("Summarizing activity data")
     summarized_data = summarize_activity_data(activity_data, wellness_data)
 
     if not os.path.exists(os.path.dirname(save_path)):
         os.makedirs(os.path.dirname(save_path))
     summarized_data.to_csv(save_path, index=False)
+
+    if st_pbar and st_message:
+        st_pbar.progress(100)
+        st_message.text("Data fetch complete")
 
 
     logger.info("Data fetch complete")
