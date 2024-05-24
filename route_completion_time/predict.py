@@ -164,6 +164,8 @@ def make_predictions(gpx_path, hour_of_day, avg_temperature, watts, kilos, atl, 
                 "lat": segment_data["latitude"].iloc[-1],
                 "lon": segment_data["longitude"].iloc[-1],
                 "distance": segment_distance,
+                "altitude_gain": segment_data["altitude_diff"].apply(lambda x: x if x > 0 else 0).sum(),
+
             })
 
             logger.info("%s model predicted completion time for segment %d in seconds: %d", model_name, i + 1, total_seconds)

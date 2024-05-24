@@ -1,6 +1,9 @@
 import folium
 from streamlit_folium import st_folium
 from folium.features import DivIcon
+import plotly.express as px
+import pandas as pd
+import streamlit as st
 
 
 def create_map_from_prediction(prediction_df, route_df):
@@ -62,6 +65,21 @@ def create_map_from_prediction(prediction_df, route_df):
 
     return m
 
+def create_elevation_profile_plot(route_df):
+    route_df["distance"] = route_df["distance"].cumsum() / 1000
+    route_df["elevation"] = route_df["altitude"] - route_df["altitude"].iloc[0]
+
+    fig = px.line(route_df, x="distance", y="elevation", title="Elevation Profile")
+    fig.update_xaxes(title_text="Distance (km)")
+    fig.update_yaxes(title_text="Elevation (m)")
+    fig.update_layout(
+        title="Elevation Profile",
+        xaxis_title="Distance (km)",
+        yaxis_title="Elevation (m)",
+        showlegend=False,
+        template="plotly_white"
+    )
+    return fig
 
 def display_map(route_df, prediction_df):
     folium_map = create_map_from_prediction(route_df, prediction_df)

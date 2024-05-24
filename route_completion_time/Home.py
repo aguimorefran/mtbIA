@@ -7,7 +7,7 @@ import pandas as pd
 from predict import make_predictions
 from fetch_data import main as fetch_data_main, fetch_wellness
 from train import main as train_main, MODEL_METRICS_SAVE_PATH
-from map import display_map
+from map import display_map, create_elevation_profile_plot
 import env
 from intervals import Intervals
 
@@ -143,5 +143,24 @@ if st.button("Process"):
             temp_file_path, TIME_OF_DAY_INIT, mean_temp, FTP, Weight, atl, ctl, REVERSE_GPX
         )
 
-        st.dataframe(prediction_df[prediction_df["r2_score"] == prediction_df["r2_score"].max()])
+        # Summarize the prediction
+        cols_to_show = [
+            "model",
+            "r2_score",
+            "quart",
+            "prediction_parsed",
+            "avg_speed_kmh",
+            "distance",
+            "altitude_gain"
+        ]
+        prediction_df["distance"] = prediction_df["distance"] / 1000
+        prediction_df["distance"] = prediction_df["distance"].round(2).astype(str) + " km"
+        st.dataframe(prediction_df[prediction_df["r2_score"] == prediction_df["r2_score"].max()][cols_to_show])
+
+        # Elev profile
+        elev_profile = create_elevation_profile_plot(activity_df)
+        st.plotly_chart(elev_profile)
+
+        # Interactive map
         display_map(prediction_df, activity_df)
+
