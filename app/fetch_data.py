@@ -1,14 +1,15 @@
 import argparse
 import datetime
+import logging
 import os
+import sqlite3
 from io import BytesIO, StringIO
 
-import env
 import fitparse
 import numpy as np
 import pandas as pd
-import logging
-import sqlite3
+
+import env
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
@@ -28,8 +29,8 @@ WELLNESS_COLS = [
 
 SLOPE_CUTS = [-np.inf, -15, -1, 4, 8, 12, 20, np.inf]
 SLOPE_LABELS = ["dh_extreme", "dh", "green", "yellow", "orange", "red", "black"]
-SAVE_PATH = "data/activity_data.csv"
-DB_PATH = "data/activities.db"
+SAVE_PATH = "data/activity_data_summarized.csv"
+DB_PATH = "data/activities_blob.db"
 
 TODAY_DATE = datetime.date.today()
 
@@ -47,7 +48,7 @@ def initialize_db(db_path):
                     activity_id TEXT PRIMARY KEY,
                     data BLOB
                 )
-            """
+                """
             )
             conn.commit()
 
@@ -89,8 +90,8 @@ def fetch_wellness(icu, start_date, end_date):
     logger.info("Fetching wellness data for %s to %s", start_date, end_date)
 
     try:
-        wellnessData = icu.wellness(start_date, end_date)
-        df = pd.DataFrame(wellnessData)
+        wellness_data = icu.wellness(start_date, end_date)
+        df = pd.DataFrame(wellness_data)
         df = process_wellness_data(df)
         return df
     except Exception as e:
@@ -165,6 +166,7 @@ def fetch_and_combine_activity_data(icu, activity_ids, db_path=DB_PATH):
 
     if dfs:
         return pd.concat(dfs, ignore_index=True)
+
     return pd.DataFrame()
 
 
@@ -191,7 +193,7 @@ def aggregate_activity(activity_df, wellness_df):
 
     initial_time = activity_df["timestamp"].iloc[0]
     activity_df["elapsed_time"] = (
-        activity_df["timestamp"] - initial_time
+            activity_df["timestamp"] - initial_time
     ).dt.total_seconds()
 
     activity_df["slope_color"] = pd.cut(
@@ -280,7 +282,7 @@ def summarize_activity_data(activity_df, wellness_df):
         for activity_id in activity_df["activity_id"].unique():
             activity_data = activity_df.loc[
                 activity_df["activity_id"] == activity_id
-            ].copy()
+                ].copy()
             aggregated_activity = aggregate_activity(activity_data, wellness_df)
             aggregated_results.append(aggregated_activity)
 
@@ -327,7 +329,6 @@ def main(save_path=SAVE_PATH, st_pbar=None, st_message=None):
     initialize_db(DB_PATH)
     wellness_data = fetch_wellness(icu, start_date, datetime.date.today())
 
-
     activity_ids = [
         activity["id"] for activity in icu.activities(start_date, datetime.date.today())
     ]
@@ -349,7 +350,6 @@ def main(save_path=SAVE_PATH, st_pbar=None, st_message=None):
     if st_pbar and st_message:
         st_pbar.progress(100)
         st_message.text("Data fetch complete")
-
 
     logger.info("Data fetch complete")
 

@@ -1,7 +1,10 @@
-import pandas as pd
+import logging
 import os
 import pickle
-import logging
+
+import pandas as pd
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import Lasso, Ridge
 from sklearn.metrics import (
     r2_score,
     mean_absolute_error,
@@ -10,19 +13,17 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import Lasso, Ridge
 
-#TODO: GET POWER CURVE
+# TODO: GET POWER CURVE
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-DATA_PATH = "data/activity_data.csv"
-MODEL_METRICS_SAVE_PATH = "data/model_metrics.csv"
-MODELS_SAVE_PATH = "models/"
-SCALER_SAVE_PATH = "models/scaler.pkl"
+DATA_PATH = "../data/activity_data_summarized.csv"
+MODEL_METRICS_SAVE_PATH = "../data/model_metrics.csv"
+MODELS_SAVE_PATH = "../models/"
+SCALER_SAVE_PATH = "../models/scaler.pkl"
 
 PREDICT_FEATURE = "duration_seconds"
 IGNORE_COLUMNS = ["activity_id", "date"]

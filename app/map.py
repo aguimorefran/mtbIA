@@ -1,9 +1,6 @@
 import folium
-from streamlit_folium import st_folium
-from folium.features import DivIcon
 import plotly.express as px
-import pandas as pd
-import streamlit as st
+from streamlit_folium import st_folium
 
 
 def create_map_from_prediction(prediction_df, route_df):
@@ -11,7 +8,6 @@ def create_map_from_prediction(prediction_df, route_df):
     prediction_df = prediction_df[prediction_df["model"] == best_model]
 
     prediction_df = prediction_df.sort_values("prediction_seconds")
-
 
     center_lat = route_df["latitude"].mean()
     center_long = route_df["longitude"].mean()
@@ -47,7 +43,6 @@ def create_map_from_prediction(prediction_df, route_df):
         time_str = f"{hours}h {minutes}m"
         popup_text = f"Prediction: {time_str}"
 
-
         icon_number = str(i + 1)
         folium.Marker(
             location=[lat, lon],
@@ -65,6 +60,7 @@ def create_map_from_prediction(prediction_df, route_df):
 
     return m
 
+
 def create_elevation_profile_plot(route_df):
     route_df["distance"] = route_df["distance"].cumsum() / 1000
     route_df["elevation"] = route_df["altitude"] - route_df["altitude"].iloc[0]
@@ -80,6 +76,7 @@ def create_elevation_profile_plot(route_df):
         template="plotly_white"
     )
     return fig
+
 
 def display_map(route_df, prediction_df):
     folium_map = create_map_from_prediction(route_df, prediction_df)

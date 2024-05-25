@@ -1,6 +1,7 @@
 # mtb IA
 
-mtb IA is a repository dedicated to predicting route completion times for MTB (Mountain Bike) activities. This repository contains scripts to process activity data, train a prediction model, and evaluate its performance.
+mtb IA is a repository dedicated to predicting route completion times for MTB (Mountain Bike) activities. This
+repository contains scripts to process activity data, train a prediction model, and evaluate its performance.
 
 ## Repository Structure
 
@@ -11,13 +12,15 @@ mtb IA is a repository dedicated to predicting route completion times for MTB (M
 
 ### fetch_data.py
 
-This script is responsible for fetching wellness and MTB activity data from an external source and processing it for later use in model training.
+This script is responsible for fetching wellness and MTB activity data from an external source and processing it for
+later use in model training.
 
 #### Features
 
 - `fetch_wellness(icu, start_date, end_date)`: Fetches wellness data between the specified dates.
 - `process_wellness_data(df)`: Processes wellness data, filling missing values and calculating additional metrics.
-- `retrieve_activity_data(icu, activity_id)`: Retrieves activity data in FIT format and converts it into a pandas DataFrame.
+- `retrieve_activity_data(icu, activity_id)`: Retrieves activity data in FIT format and converts it into a pandas
+  DataFrame.
 
 #### Usage
 
@@ -26,13 +29,16 @@ This script is responsible for fetching wellness and MTB activity data from an e
 
 ### train.py
 
-This script is used to train a route completion time prediction model based on the processed data. It uses a `RandomForestRegressor` from Scikit-Learn and saves the model metrics to a CSV file.
+This script is used to train a route completion time prediction model based on the processed data. It uses
+a `RandomForestRegressor` from Scikit-Learn and saves the model metrics to a CSV file.
 
 #### Features
 
-- `process_data(data_path, predict_feature, ignore_columns)`: Processes the data, splitting it into training and testing sets.
+- `process_data(data_path, predict_feature, ignore_columns)`: Processes the data, splitting it into training and testing
+  sets.
 - `scale_and_decompose(X_train, X_test)`: Scales the data using `StandardScaler`.
-- `train_and_evaluate_model(X_train, y_train, X_test, y_test, feature_names)`: Trains the model, evaluates its performance, and saves the feature importances.
+- `train_and_evaluate_model(X_train, y_train, X_test, y_test, feature_names)`: Trains the model, evaluates its
+  performance, and saves the feature importances.
 - `save_metrics(path, metrics)`: Saves the model metrics to a CSV file.
 
 #### Usage

@@ -11,3 +11,4 @@ gpxpy
 streamlit
 streamlit_folium
 folium
+plotly

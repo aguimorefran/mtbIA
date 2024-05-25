@@ -1,15 +1,18 @@
 import logging
+import os
+import pickle
+
+import gpxpy
+import haversine as hs
 import numpy as np
 import pandas as pd
-import pickle
-import gpxpy
-import os
-import haversine as hs
-from fetch_data import SLOPE_LABELS, SLOPE_CUTS
-from train import MODEL_METRICS_SAVE_PATH, MODELS_SAVE_PATH, SCALER_SAVE_PATH
+from app.fetch_data import SLOPE_LABELS, SLOPE_CUTS
+
+from app.route_time.train_route_time import MODEL_METRICS_SAVE_PATH, MODELS_SAVE_PATH, SCALER_SAVE_PATH
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
+
 
 def read_gpx(gpx_path):
     try:
@@ -28,6 +31,7 @@ def read_gpx(gpx_path):
         logger.error("Failed to read GPX file: %s", e)
         raise
 
+
 def load_models_and_scaler(models_dir, scaler_path):
     models = {}
     for model_name in ["RandomForest", "Lasso", "Ridge"]:
@@ -37,6 +41,7 @@ def load_models_and_scaler(models_dir, scaler_path):
     with open(scaler_path, "rb") as f:
         scaler = pickle.load(f)
     return models, scaler
+
 
 def calculate_distance_slope(activity_df):
     activity_df = activity_df.copy()
@@ -62,6 +67,7 @@ def calculate_distance_slope(activity_df):
 
     return activity_df
 
+
 def aggregate_activity(activity_df):
     logger.info("Aggregating activity data")
     activity_df = calculate_distance_slope(activity_df)
@@ -74,7 +80,7 @@ def aggregate_activity(activity_df):
         .reset_index()
     )
     df_slope_color["distance"] = (
-        df_slope_color["distance"] / df_slope_color["distance"].sum()
+            df_slope_color["distance"] / df_slope_color["distance"].sum()
     )
     activity_summary = (
         activity_df.agg(
@@ -93,6 +99,7 @@ def aggregate_activity(activity_df):
     df_slope_color = df_slope_color.reset_index(drop=True)
     combined_df = pd.concat([activity_summary, df_slope_color], axis=1)
     return combined_df
+
 
 def make_predictions(gpx_path, hour_of_day, avg_temperature, watts, kilos, atl, ctl, reverse=False):
     logger.info("Reading GPX file")
@@ -168,8 +175,10 @@ def make_predictions(gpx_path, hour_of_day, avg_temperature, watts, kilos, atl, 
 
             })
 
-            logger.info("%s model predicted completion time for segment %d in seconds: %d", model_name, i + 1, total_seconds)
-            logger.info("%s model predicted completion time for segment %d formatted: %s", model_name, i + 1, formatted_time)
+            logger.info("%s model predicted completion time for segment %d in seconds: %d", model_name, i + 1,
+                        total_seconds)
+            logger.info("%s model predicted completion time for segment %d formatted: %s", model_name, i + 1,
+                        formatted_time)
 
     metrics_df = pd.read_csv(MODEL_METRICS_SAVE_PATH)
     prediction_df = pd.DataFrame(predictions)
@@ -180,6 +189,7 @@ def make_predictions(gpx_path, hour_of_day, avg_temperature, watts, kilos, atl, 
     result_df = result_df[result_df["timestamp"] == latest_timestamp]
 
     return result_df, gpx_data
+
 
 if __name__ == "__main__":
     result_df, gpx_data = make_predictions(

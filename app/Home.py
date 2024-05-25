@@ -1,15 +1,23 @@
 import datetime
+import os
+import sys
+import tempfile
 import threading
 import time
-import streamlit as st
-import tempfile
+
 import pandas as pd
-from predict import make_predictions
-from fetch_data import main as fetch_data_main, fetch_wellness
-from train import main as train_main, MODEL_METRICS_SAVE_PATH
-from map import display_map, create_elevation_profile_plot
+import streamlit as st
+
 import env
-from intervals import Intervals
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from route_time.predict_route_time import make_predictions
+from route_time.train_route_time import main as train_main, MODEL_METRICS_SAVE_PATH
+from fetch_data import main as fetch_data_main, fetch_wellness
+from map import display_map, create_elevation_profile_plot
+from app.intervals import Intervals
+
 
 def load_model_metrics():
     try:
@@ -19,6 +27,7 @@ def load_model_metrics():
         return None
     # Return which row has max r2_score
     return model_metrics[model_metrics["r2_score"] == model_metrics["r2_score"].max()]
+
 
 def get_last_wellness():
     start_date = datetime.datetime.strptime(env.START_DATE, "%d/%m/%Y").date()
@@ -30,6 +39,7 @@ def get_last_wellness():
     except FileNotFoundError:
         st.warning("No wellness data found. Please fetch wellness data first.")
         return None
+
 
 # Get last row
 wellness = get_last_wellness().iloc[-1]
@@ -61,6 +71,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+
 def check_and_run_tasks():
     while True:
         now = datetime.datetime.now()
@@ -69,6 +80,7 @@ def check_and_run_tasks():
             train_main()
             time.sleep(60)
         time.sleep(60)
+
 
 # Start the background thread
 threading.Thread(target=check_and_run_tasks, daemon=True).start()
@@ -121,7 +133,6 @@ if st.button("Fetch Data"):
     message = st.empty()
     fetch_data_main(st_pbar=pbar_fetch, st_message=message)
 
-
 if st.button("Train Model"):
     pb = st.progress(0)
     message = st.empty()
@@ -163,4 +174,3 @@ if st.button("Process"):
 
         # Interactive map
         display_map(prediction_df, activity_df)
-

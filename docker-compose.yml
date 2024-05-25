@@ -8,3 +8,5 @@ services:
     volumes:
       - .:/app
     container_name: streamlit_app
+    environment:
+      - PYTHONPATH=/app
