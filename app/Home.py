@@ -12,11 +12,12 @@ import env
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from route_time.predict_route_time import make_predictions
-from route_time.train_route_time import main as train_main, MODEL_METRICS_SAVE_PATH
-from fetch_data import main as fetch_data_main, fetch_wellness
-from map import display_map, create_elevation_profile_plot
+from app.route_time.predict_route_time import make_predictions
+from app.route_time.train_route_time import main as train_main, MODEL_METRICS_SAVE_PATH
+from app.fetch_data import main as fetch_data_main, fetch_wellness
+from app.map import display_map, create_elevation_profile_plot
 from app.intervals import Intervals
+
 
 
 def load_model_metrics():

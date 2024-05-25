@@ -20,10 +20,10 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-DATA_PATH = "../data/activity_data_summarized.csv"
-MODEL_METRICS_SAVE_PATH = "../data/model_metrics.csv"
-MODELS_SAVE_PATH = "../models/"
-SCALER_SAVE_PATH = "../models/scaler.pkl"
+DATA_PATH = "data/activity_data_summarized.csv"
+MODEL_METRICS_SAVE_PATH = "data/model_metrics.csv"
+MODELS_SAVE_PATH = "models/"
+SCALER_SAVE_PATH = "models/scaler.pkl"
 
 PREDICT_FEATURE = "duration_seconds"
 IGNORE_COLUMNS = ["activity_id", "date"]
