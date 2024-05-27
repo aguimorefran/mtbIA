@@ -19,7 +19,6 @@ from app.map import display_map, create_elevation_profile_plot
 from app.intervals import Intervals
 
 
-
 def load_model_metrics():
     try:
         model_metrics = pd.read_csv(MODEL_METRICS_SAVE_PATH)

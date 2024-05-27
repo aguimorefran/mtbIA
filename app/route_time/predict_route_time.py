@@ -6,8 +6,8 @@ import gpxpy
 import haversine as hs
 import numpy as np
 import pandas as pd
-from app.fetch_data import SLOPE_LABELS, SLOPE_CUTS
 
+from app.fetch_data import SLOPE_LABELS, SLOPE_CUTS
 from app.route_time.train_route_time import MODEL_METRICS_SAVE_PATH, MODELS_SAVE_PATH, SCALER_SAVE_PATH
 
 logger = logging.getLogger(__name__)

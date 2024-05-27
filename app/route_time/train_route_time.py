@@ -21,9 +21,9 @@ logging.basicConfig(
 )
 
 DATA_PATH = "data/activity_data_summarized.csv"
-MODEL_METRICS_SAVE_PATH = "data/model_metrics.csv"
+MODEL_METRICS_SAVE_PATH = "data/model_metrics_route_time.csv"
 MODELS_SAVE_PATH = "models/"
-SCALER_SAVE_PATH = "models/scaler.pkl"
+SCALER_SAVE_PATH = "models/scaler_route_time.pkl"
 
 PREDICT_FEATURE = "duration_seconds"
 IGNORE_COLUMNS = ["activity_id", "date"]
@@ -158,7 +158,7 @@ def main(st_pbar=None, st_message=None):
     save_scaler(SCALER_SAVE_PATH, scaler)
 
     for model_name, model in models.items():
-        model_path = os.path.join(MODELS_SAVE_PATH, f"{model_name}_model.pkl")
+        model_path = os.path.join(MODELS_SAVE_PATH, f"{model_name}_model_route_time.pkl")
         save_model(model_path, model)
 
     if st_pbar and st_message:

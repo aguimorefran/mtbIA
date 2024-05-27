@@ -29,7 +29,8 @@ WELLNESS_COLS = [
 
 SLOPE_CUTS = [-np.inf, -15, -1, 4, 8, 12, 20, np.inf]
 SLOPE_LABELS = ["dh_extreme", "dh", "green", "yellow", "orange", "red", "black"]
-SAVE_PATH = "data/activity_data_summarized.csv"
+SUMMARIZED_SAVE_PATH = "data/activity_data_summarized.csv"
+RAW_SAVE_PATH = "data/activity_data_raw.csv"
 DB_PATH = "data/activities_blob.db"
 
 TODAY_DATE = datetime.date.today()
@@ -295,7 +296,7 @@ def summarize_activity_data(activity_df, wellness_df):
     return final_df
 
 
-def main(save_path=SAVE_PATH, st_pbar=None, st_message=None):
+def main(summarized_save_path=SUMMARIZED_SAVE_PATH, raw_save_path=RAW_SAVE_PATH, st_pbar=None, st_message=None):
     logger.info("Starting data fetch")
     if st_pbar and st_message:
         st_pbar.progress(0)
@@ -343,9 +344,18 @@ def main(save_path=SAVE_PATH, st_pbar=None, st_message=None):
         st_message.text("Summarizing activity data")
     summarized_data = summarize_activity_data(activity_data, wellness_data)
 
-    if not os.path.exists(os.path.dirname(save_path)):
-        os.makedirs(os.path.dirname(save_path))
-    summarized_data.to_csv(save_path, index=False)
+    if not os.path.exists(os.path.dirname(summarized_save_path)):
+        os.makedirs(os.path.dirname(summarized_save_path))
+    summarized_data.to_csv(summarized_save_path, index=False)
+
+    # Save raw activity data
+    if not os.path.exists(os.path.dirname(raw_save_path)):
+        os.makedirs(os.path.dirname(raw_save_path))
+    raw_data = activity_data.copy()
+
+    raw_data["date"] = raw_data["timestamp"].dt.date.astype(str)
+    raw_data = pd.merge(raw_data, wellness_data, on="date", how="left")
+    raw_data.to_csv(raw_save_path, index=False)
 
     if st_pbar and st_message:
         st_pbar.progress(100)
@@ -353,7 +363,7 @@ def main(save_path=SAVE_PATH, st_pbar=None, st_message=None):
 
     logger.info("Data fetch complete")
 
-    return summarized_data
+    return summarized_data, raw_data
 
 
 if __name__ == "__main__":
