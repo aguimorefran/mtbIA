@@ -203,6 +203,40 @@ class Intervals:
             return result
         return j
 
+    def events(self, start_date, end_date=None, format='json', calendar_id=None, ext=None,
+               powerRange=None, hrRange=None, paceRange=None, locale=None, resolve=False):
+
+        if type(start_date) is not datetime.date:
+            raise TypeError("start_date must be a datetime.date")
+
+        params = {
+            "oldest": start_date.isoformat(),
+            "format": format,
+            "resolve": str(resolve).lower()
+        }
+
+        if end_date is not None:
+            if type(end_date) is not datetime.date:
+                raise TypeError("end_date must be a datetime.date")
+            params["newest"] = end_date.isoformat()
+
+        if calendar_id is not None:
+            params["calendar_id"] = calendar_id
+        if ext is not None:
+            params["ext"] = ext
+        if powerRange is not None:
+            params["powerRange"] = powerRange
+        if hrRange is not None:
+            params["hrRange"] = hrRange
+        if paceRange is not None:
+            params["paceRange"] = paceRange
+        if locale is not None:
+            params["locale"] = locale
+
+        url = f"{self.BASE_URL}/api/v1/athlete/{self.athlete_id}/events.{format}"
+        res = self._make_request("get", url, params=params)
+        return res.json()
+
     def workouts(self):
         """ """
         url = "{}/api/v1/athlete/{}/workouts".format(

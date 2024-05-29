@@ -27,11 +27,18 @@ WELLNESS_COLS = [
     "eftp"
 ]
 
+PLANNED_WORKOUTS_COLS = [
+    "paired_activity_id",
+    "id",
+    "start_date_local"
+]
+
 SLOPE_CUTS = [-np.inf, -15, -1, 4, 8, 12, 20, np.inf]
 SLOPE_LABELS = ["dh_extreme", "dh", "green", "yellow", "orange", "red", "black"]
 SUMMARIZED_SAVE_PATH = "data/activity_data_summarized.csv"
 RAW_SAVE_PATH = "data/activity_data_raw.csv"
 DB_PATH = "data/activities_blob.db"
+PLANNED_WORKOUTS_SAVE_PATH = "data/planned_workouts.csv"
 
 TODAY_DATE = datetime.date.today()
 
@@ -115,6 +122,31 @@ def process_wellness_data(df):
     return df[WELLNESS_COLS]
 
 
+def fetch_planned_workouts(icu, start_date, end_date):
+    if not isinstance(start_date, datetime.date) or not isinstance(end_date, datetime.date):
+        raise TypeError("start_date and end_date must be datetime.date instances")
+
+    try:
+        logger.info("Fetching planned workouts for %s to %s", start_date, end_date)
+        events = icu.events(start_date, end_date)
+
+        # Check if the events list is not empty and contains the necessary data
+        if not events or not all(key in events[0] for key in PLANNED_WORKOUTS_COLS):
+            raise ValueError("Missing required columns in the fetched data")
+
+        # Create DataFrame and filter columns
+        df = pd.DataFrame(events)
+        df = df[PLANNED_WORKOUTS_COLS]
+
+        # Handle missing values for paired_activity_id if necessary
+        df['paired_activity_id'] = df['paired_activity_id'].fillna('N/A')
+
+        return df
+
+    except Exception as e:
+        logger.error(f"An error occurred: {e}")
+        return pd.DataFrame()
+
 def retrieve_activity_data(icu, activity_id):
     try:
         fit_bytes = icu.activity_fit_data(activity_id)
@@ -139,7 +171,6 @@ def retrieve_activity_data(icu, activity_id):
 
 
 def fetch_and_combine_activity_data(icu, activity_ids, db_path=DB_PATH):
-    # TODO: GET POWER CURVE
     logger.info("Fetching activity data for %s activities", len(activity_ids))
     dfs = []
 
@@ -329,6 +360,12 @@ def main(summarized_save_path=SUMMARIZED_SAVE_PATH, raw_save_path=RAW_SAVE_PATH,
     icu = Intervals(env.ATHLETE_ID, env.API_KEY)
     initialize_db(DB_PATH)
     wellness_data = fetch_wellness(icu, start_date, datetime.date.today())
+
+    planned_workouts = fetch_planned_workouts(icu, start_date, datetime.date.today())
+
+    if not os.path.exists(os.path.dirname(PLANNED_WORKOUTS_SAVE_PATH)):
+        os.makedirs(os.path.dirname(PLANNED_WORKOUTS_SAVE_PATH))
+    planned_workouts.to_csv(PLANNED_WORKOUTS_SAVE_PATH, index=False)
 
     activity_ids = [
         activity["id"] for activity in icu.activities(start_date, datetime.date.today())
