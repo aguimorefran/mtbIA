@@ -1,32 +1,37 @@
-import pandas as pd
-import numpy as np
-import logging
-import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
-from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, LSTM, BatchNormalization, Dropout
-from tensorflow.keras.optimizers import Adam
-from datetime import datetime
 import os
 
+os.environ['PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION'] = 'python'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+import logging
+import os
+
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
+from tensorflow.keras.layers import Dense, LSTM, Dropout, BatchNormalization
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.optimizers import Adam
+import tensorflow as tf
+from tensorflow.keras.layers import RNN, LSTMCell
+from tensorflow.keras.callbacks import LearningRateScheduler, EarlyStopping
+
+
 # Configure the logger
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Constants
 RAW_DATA_PATH = "data/activity_data_raw.csv"
 PLANNED_WORKOUTS_PATH = "data/planned_workouts.csv"
-SEQ_LENGTH = 10
-BATCH_SIZE = 32
-EPOCHS = 50
-TARGET_FEATURES = ["power_3s_avg", "seconds_from_start"]
-FEATURES = ["grade", "ascent_meters", "distance_meters", "atl_start", "ctl_start", "watt_kg", "temperature"]
+TARGET_FEATURES = ["power_3s_avg"]
+FEATURES = ["grade", "ascent_meters", "distance_meters", "atl_start", "ctl_start", "watt_kg", "temperature",
+            "distance_diff"]
 ALL_FEATURES = TARGET_FEATURES + FEATURES
 MODEL_PATH = "models/LSTM_power.keras"
 METRICS_PATH = "data/model_metrics_power.csv"
+
 
 def load_activity_data(csv_path):
     logger.info(f"Loading data from {csv_path}")
@@ -35,32 +40,34 @@ def load_activity_data(csv_path):
     logger.info("Data loaded successfully")
     return df
 
+
+def ensure_dir(file_path):
+    directory = os.path.dirname(file_path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+
 def preprocess_data(df, drop_activities_with_workout=False):
     logger.info("Starting data preprocessing")
     df = df.sort_values(by=["activity_id", "timestamp"])
-    df["altitude_diff"] = df["altitude"].diff().fillna(0)
+    df["altitude_diff"] = df["altitude"].diff()
+    df["distance_diff"] = df["distance"].diff()
     df["ascent_meters"] = df["altitude_diff"].apply(lambda x: x if x > 0 else 0).cumsum()
     df["seconds_from_start"] = (df["timestamp"] - df["timestamp"].iloc[0]).dt.total_seconds()
     df.rename(columns={"distance": "distance_meters"}, inplace=True)
-    scaler = StandardScaler()
 
-    # Fill NaN values with a middle value between the previous and next values
     df.fillna(method='ffill', inplace=True)
+    df.fillna(method='bfill', inplace=True)
 
-    # Calculate 3-second moving average for power
     df["power_3s_avg"] = df["power"].rolling(window=3, min_periods=1).mean()
 
-    # Load planned workouts
     planned_workouts = pd.read_csv(PLANNED_WORKOUTS_PATH)
 
-    # If drop_activities_with_workout is True, drop activities whose id appear in planned_workouts["paired_activity_id"]
     if drop_activities_with_workout:
         intersecting_activities = planned_workouts["paired_activity_id"].unique()
         logger.info(f"Dropping {len(intersecting_activities)} activities with planned workouts")
         df = df[~df["activity_id"].isin(intersecting_activities)]
         logger.info(f"Remaining activities: {df['activity_id'].nunique()}")
-
-    df[ALL_FEATURES] = scaler.fit_transform(df[ALL_FEATURES])
 
     rows_na = df.isna().sum().sum()
     df.dropna(inplace=True)
@@ -72,12 +79,15 @@ def preprocess_data(df, drop_activities_with_workout=False):
     logger.info("Data preprocessing completed")
     return df
 
-def ensure_dir(file_path):
-    directory = os.path.dirname(file_path)
-    if not os.path.exists(directory):
-        os.makedirs(directory)
 
-def create_sequences(data, sequence_length, target_columns):
+def create_sequences(data, sequence_length, target_columns, n_activities=None):
+    if n_activities is not None:
+        unique_activities = data['activity_id'].unique()
+        if n_activities > len(unique_activities):
+            raise ValueError("n_activities cannot be greater than the number of unique activities in the data")
+        selected_activities = np.random.choice(unique_activities, size=n_activities, replace=False)
+        data = data[data['activity_id'].isin(selected_activities)]
+
     num_records = len(data)
     num_features = len(FEATURES)
     num_targets = len(target_columns)
@@ -95,107 +105,94 @@ def create_sequences(data, sequence_length, target_columns):
     return sequences, targets
 
 
-def build_model(units=100, dropout_rate=0.2, learning_rate=0.001):
-    logger.info(
-        f"Building the LSTM model with units={units}, dropout_rate={dropout_rate}, learning_rate={learning_rate}")
+def scheduler(epoch, lr):
+    if epoch < 10:
+        return lr
+    else:
+        return lr * tf.math.exp(-0.1)
+def build_model(units=50, dropout_rate=0.2, learning_rate=0.001, dense_neurons=8, dense_layers=4, lstm_layers=3, sequence_length=300):
+    logger.info(f"Building the LSTM model with units={units}, dropout_rate={dropout_rate}, learning_rate={learning_rate}")
     model = Sequential()
-    model.add(LSTM(units, activation="relu", input_shape=(SEQ_LENGTH, len(FEATURES)), return_sequences=True))
-    model.add(BatchNormalization())
-    model.add(Dropout(dropout_rate))
-    model.add(LSTM(units, activation="relu", return_sequences=True))
-    model.add(BatchNormalization())
-    model.add(Dropout(dropout_rate))
-    model.add(LSTM(units))
-    model.add(BatchNormalization())
-    model.add(Dropout(dropout_rate))
+
+    # Add dense layers
+    for _ in range(dense_layers):
+        model.add(Dense(dense_neurons, activation='relu', input_shape=(sequence_length, len(FEATURES))))
+        model.add(BatchNormalization())
+        model.add(Dropout(dropout_rate))
+
+    # Add LSTM layers
+    for i in range(lstm_layers):
+        return_seq = True if i < lstm_layers - 1 else False
+        model.add(RNN(
+            LSTMCell(units, activation="tanh", use_bias=True, recurrent_activation='sigmoid', recurrent_initializer='glorot_uniform'),
+            input_shape=(sequence_length, len(FEATURES)),
+            return_sequences=return_seq
+        ))
+        model.add(BatchNormalization())
+        model.add(Dropout(dropout_rate))
+
     model.add(Dense(len(TARGET_FEATURES)))
     model.compile(optimizer=Adam(learning_rate=learning_rate), loss="mse")
     logger.info("LSTM model built and compiled")
     return model
 
+def get_model_metrics(model, sequences, targets):
+    logger.info("Getting model metrics")
+    predictions = model.predict(sequences)
+    metrics = {}
+    for i, target in enumerate(TARGET_FEATURES):
+        metric = tf.keras.metrics.mean_squared_error(targets[:, i], predictions[:, i]).numpy()
+        metrics[target] = metric
+    logger.info(f"Model metrics: {metrics}")
+    return metrics
 
-def plot_predictions(y_test, y_pred):
-    plt.figure(figsize=(14, 5))
-    plt.subplot(1, 2, 1)
-    plt.plot(y_test[:, 0], label='True Power')
-    plt.plot(y_pred[:, 0], label='Predicted Power')
-    plt.legend()
-    plt.subplot(1, 2, 2)
-    plt.plot(y_test[:, 1], label='True Seconds from Start')
-    plt.plot(y_pred[:, 1], label='Predicted Seconds from Start')
+def plot_history(history):
+    plt.plot(history.history['loss'], label='loss')
+    plt.plot(history.history['val_loss'], label='val_loss')
     plt.legend()
     plt.show()
 
-
-def save_model(model, path):
-    ensure_dir(path)
-    logger.info(f"Saving model to {path}")
-    model.save(path)
-    logger.info("Model saved successfully")
-
-
-def save_metrics(metrics, path):
-    logger.info(f"Saving metrics to {path}")
-    df_metrics = pd.DataFrame([metrics])
-    if os.path.exists(path):
-        df_metrics.to_csv(path, mode='a', header=False, index=False)
-    else:
-        df_metrics.to_csv(path, index=False)
-    logger.info("Metrics saved successfully")
-
-
 def main():
+    LR_INIT = 0.001
+    SEQ_LENGTH = 300
+    BATCH_SIZE = 5120
+    EPOCHS = 50
+    ACTIVITIES_TO_USE = 5
+    physical_devices = tf.config.list_physical_devices('GPU')
+    if physical_devices:
+        try:
+            tf.config.experimental.set_visible_devices(physical_devices[0], 'GPU')
+            for device in physical_devices:
+                tf.config.experimental.set_memory_growth(device, True)
+        except RuntimeError as e:
+            print(e)
+
+    print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+
     df = load_activity_data(RAW_DATA_PATH)
     df = preprocess_data(df, drop_activities_with_workout=True)
 
-    logger.info(f"Creating sequences with length {SEQ_LENGTH}")
-    all_sequences, all_targets = [], []
-    for id in df["activity_id"].unique():
-        activity_data = df[df["activity_id"] == id]
-        sequences, targets = create_sequences(activity_data, SEQ_LENGTH, TARGET_FEATURES)
-        all_sequences.append(sequences)
-        all_targets.append(targets)
+    # Get the sequences of 1 activity
+    sequences, targets = create_sequences(df, SEQ_LENGTH, TARGET_FEATURES, n_activities=ACTIVITIES_TO_USE)
 
-    X = np.concatenate(all_sequences, axis=0)
-    y = np.concatenate(all_targets, axis=0)
+    scaler = StandardScaler()
+    for i in range(sequences.shape[0]): # Scale each sequence
+        sequences[i, :, :] = scaler.fit_transform(sequences[i, :, :])
 
-    logger.info(f"Shape of X: {X.shape}, Shape of y: {y.shape}")
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    targets = scaler.fit_transform(targets)
 
-    # Use the best hyperparameters found
-    best_hyperparams = {'units': 50, 'dropout_rate': 0.2, 'learning_rate': 0.001}
-    logger.info(f"Training with best hyperparameters: {best_hyperparams}")
 
-    model = build_model(**best_hyperparams)
-    early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
-    history = model.fit(X_train, y_train, epochs=EPOCHS, batch_size=BATCH_SIZE, validation_data=(X_test, y_test),
-                        callbacks=[early_stopping])
+    # Train a model with the sequences
+    lr_scheduler = LearningRateScheduler(scheduler)
+    early_stopping = EarlyStopping(monitor='val_loss', patience=10)
 
-    val_loss = model.evaluate(X_test, y_test)
-    y_pred = model.predict(X_test)
+    model = build_model(dense_layers=0, dense_neurons=0, learning_rate=LR_INIT, sequence_length=SEQ_LENGTH)
+    history = model.fit(sequences, targets, batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.2, callbacks=[early_stopping])
 
-    # Calculate metrics
-    r2 = r2_score(y_test, y_pred)
-    mae = mean_absolute_error(y_test, y_pred)
-    mse = mean_squared_error(y_test, y_pred)
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    metrics = {
-        'model': 'LSTM_power',
-        'r2_score': r2,
-        'mean_absolute_error': mae,
-        'mean_squared_error': mse,
-        'timestamp': timestamp
-    }
+    plot_history(history)
 
-    logger.info(f"Metrics: R2 Score: {r2}, MAE: {mae}, MSE: {mse}")
-
-    save_model(model, MODEL_PATH)
-    save_metrics(metrics, METRICS_PATH)
-
-    plot_predictions(y_test, y_pred)
 
 
 if __name__ == "__main__":
     main()
-

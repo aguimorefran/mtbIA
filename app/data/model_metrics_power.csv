@@ -1,0 +1,2 @@
+learning_rate,cnn_filters,lstm_units,dense_units,dropout_rate_lstm,dropout_rate_dense,dropout_rate_cnn,l2_reg,val_loss
+0.006014736743453021,[],"[64, 32, 16]","[32, 16]",0.12668212445133997,0.35869534862394686,0.47870322262507353,0.01043485496493897,0.29762405157089233

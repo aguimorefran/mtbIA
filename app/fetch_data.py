@@ -14,6 +14,9 @@ import env
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 
+pd.set_option('future.no_silent_downcasting', True)
+
+
 from intervals import Intervals
 
 WELLNESS_COLS = [
@@ -24,14 +27,10 @@ WELLNESS_COLS = [
     "date",
     "watt_kg",
     "weight",
-    "eftp"
+    "eftp",
 ]
 
-PLANNED_WORKOUTS_COLS = [
-    "paired_activity_id",
-    "id",
-    "start_date_local"
-]
+PLANNED_WORKOUTS_COLS = ["paired_activity_id", "id", "start_date_local"]
 
 SLOPE_CUTS = [-np.inf, -15, -1, 4, 8, 12, 20, np.inf]
 SLOPE_LABELS = ["dh_extreme", "dh", "green", "yellow", "orange", "red", "black"]
@@ -123,7 +122,9 @@ def process_wellness_data(df):
 
 
 def fetch_planned_workouts(icu, start_date, end_date):
-    if not isinstance(start_date, datetime.date) or not isinstance(end_date, datetime.date):
+    if not isinstance(start_date, datetime.date) or not isinstance(
+        end_date, datetime.date
+    ):
         raise TypeError("start_date and end_date must be datetime.date instances")
 
     try:
@@ -139,13 +140,14 @@ def fetch_planned_workouts(icu, start_date, end_date):
         df = df[PLANNED_WORKOUTS_COLS]
 
         # Handle missing values for paired_activity_id if necessary
-        df['paired_activity_id'] = df['paired_activity_id'].fillna('N/A')
+        df["paired_activity_id"] = df["paired_activity_id"].fillna("N/A")
 
         return df
 
     except Exception as e:
         logger.error(f"An error occurred: {e}")
         return pd.DataFrame()
+
 
 def retrieve_activity_data(icu, activity_id):
     try:
@@ -172,34 +174,50 @@ def retrieve_activity_data(icu, activity_id):
 
 def fetch_and_combine_activity_data(icu, activity_ids, db_path=DB_PATH):
     logger.info("Fetching activity data for %s activities", len(activity_ids))
-    dfs = []
+    all_data = []
+    all_columns = set()
 
     for idx, activity_id in enumerate(activity_ids):
+        print(f"Fetching data for activity_id: {activity_id}")
         data = load_activity_data(activity_id, db_path)
         if data:
             result = pd.read_json(StringIO(data))
             result["activity_id"] = activity_id
+            result["timestamp"] = pd.to_datetime(result["timestamp"])
             result["hour_of_day"] = result["timestamp"].dt.hour
-            dfs.append(result)
+            all_columns.update(result.columns)
+            all_data.append(result)
         else:
             try:
                 result = retrieve_activity_data(icu, activity_id)
                 if not result.empty:
                     save_activity_data(activity_id, result.to_json(), db_path)
                     result["activity_id"] = activity_id
+                    result["timestamp"] = pd.to_datetime(result["timestamp"])
                     result["hour_of_day"] = result["timestamp"].dt.hour
-                    dfs.append(result)
+                    all_columns.update(result.columns)
+                    all_data.append(result)
             except Exception as e:
                 logger.error("Error fetching activity data for %s: %s", activity_id, e)
                 continue
 
-        if idx % (len(activity_ids) // 4) == 0:
+        if len(activity_ids) > 4 and idx % (len(activity_ids) // 4) == 0:
             logger.info("Progress: %s/%s", 25 * (idx // (len(activity_ids) // 4)), 100)
 
-    if dfs:
-        return pd.concat(dfs, ignore_index=True)
+    all_columns = sorted(all_columns)
 
-    return pd.DataFrame()
+    for i, df in enumerate(all_data):
+        missing_columns = set(all_columns) - set(df.columns)
+        for col in missing_columns:
+            df[col] = np.nan
+        all_data[i] = df[all_columns]
+
+    all_data = [df.to_numpy() for df in all_data]
+    combined_array = np.vstack(all_data)
+
+    combined_df = pd.DataFrame(combined_array, columns=all_columns)
+    print(f"Combined DataFrame shape: {combined_df.shape}")
+    return combined_df
 
 
 def aggregate_activity(activity_df, wellness_df):
@@ -207,9 +225,20 @@ def aggregate_activity(activity_df, wellness_df):
     activity_df["timestamp"] = pd.to_datetime(activity_df["timestamp"])
     activity_df.sort_values(by=["activity_id", "timestamp"], inplace=True)
 
-    activity_df["distance"] = activity_df["distance"].fillna(0)
-    activity_df["distance_diff"] = activity_df["distance"].diff().fillna(0)
-    activity_df["altitude_diff"] = activity_df["altitude"].diff().fillna(0)
+    # Asegúrate de que las columnas sean inferidas correctamente
+    activity_df["distance"] = (
+        activity_df["distance"].fillna(0).infer_objects(copy=False)
+    )
+    activity_df["distance_diff"] = (
+        activity_df["distance"].diff().fillna(0).infer_objects(copy=False)
+    )
+
+    activity_df["altitude"] = (
+        activity_df["altitude"].fillna(0).infer_objects(copy=False)
+    )
+    activity_df["altitude_diff"] = (
+        activity_df["altitude"].diff().fillna(0).infer_objects(copy=False)
+    )
 
     slopes = np.where(
         activity_df["distance_diff"] != 0,
@@ -225,7 +254,7 @@ def aggregate_activity(activity_df, wellness_df):
 
     initial_time = activity_df["timestamp"].iloc[0]
     activity_df["elapsed_time"] = (
-            activity_df["timestamp"] - initial_time
+        activity_df["timestamp"] - initial_time
     ).dt.total_seconds()
 
     activity_df["slope_color"] = pd.cut(
@@ -314,7 +343,7 @@ def summarize_activity_data(activity_df, wellness_df):
         for activity_id in activity_df["activity_id"].unique():
             activity_data = activity_df.loc[
                 activity_df["activity_id"] == activity_id
-                ].copy()
+            ].copy()
             aggregated_activity = aggregate_activity(activity_data, wellness_df)
             aggregated_results.append(aggregated_activity)
 
@@ -327,7 +356,12 @@ def summarize_activity_data(activity_df, wellness_df):
     return final_df
 
 
-def main(summarized_save_path=SUMMARIZED_SAVE_PATH, raw_save_path=RAW_SAVE_PATH, st_pbar=None, st_message=None):
+def main(
+    summarized_save_path=SUMMARIZED_SAVE_PATH,
+    raw_save_path=RAW_SAVE_PATH,
+    st_pbar=None,
+    st_message=None,
+):
     logger.info("Starting data fetch")
     if st_pbar and st_message:
         st_pbar.progress(0)
@@ -388,10 +422,16 @@ def main(summarized_save_path=SUMMARIZED_SAVE_PATH, raw_save_path=RAW_SAVE_PATH,
     # Save raw activity data
     if not os.path.exists(os.path.dirname(raw_save_path)):
         os.makedirs(os.path.dirname(raw_save_path))
-    raw_data = activity_data.copy()
 
+    # Raw data should include all points of all activities, ensuring timestamp is properly formatted
+    raw_data = activity_data.copy()
+    raw_data["timestamp"] = pd.to_datetime(raw_data["timestamp"])
     raw_data["date"] = raw_data["timestamp"].dt.date.astype(str)
     raw_data = pd.merge(raw_data, wellness_data, on="date", how="left")
+
+    raw_data = raw_data.sort_values(by=["activity_id", "timestamp"])
+    print(f"Raw data shape: {raw_data.shape}")
+
     raw_data.to_csv(raw_save_path, index=False)
 
     if st_pbar and st_message:
