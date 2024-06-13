@@ -13,3 +13,4 @@ streamlit_folium
 folium
 plotly
 keras
+tensorflow

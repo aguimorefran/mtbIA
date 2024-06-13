@@ -1,2 +1,2 @@
-learning_rate,cnn_filters,lstm_units,dense_units,dropout_rate_lstm,dropout_rate_dense,dropout_rate_cnn,l2_reg,val_loss
-0.006014736743453021,[],"[64, 32, 16]","[32, 16]",0.12668212445133997,0.35869534862394686,0.47870322262507353,0.01043485496493897,0.29762405157089233
+learning_rate,sequence_length,lstm_units,dense_units,dropout_rate_lstm,dropout_rate_dense,dropout_rate_cnn,l2_reg,cnn_filters,augmentation_methods,scaler_type,val_loss
+0.0025040941571622213,37,"[50, 50, 50]","[128, 64, 32]",0.3988563205469802,0.37182143416710933,0.49110805809829056,0.0002864706810295558,[],"['noise', 'scaling', 'time_warping']",MinMaxScaler,0.006920811254531145
