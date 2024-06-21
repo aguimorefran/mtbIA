@@ -1,91 +1,63 @@
 import logging
 import os
 import pickle
+from typing import Dict, List, Tuple
 
+import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import Lasso, Ridge
-from sklearn.metrics import (
-    r2_score,
-    mean_absolute_error,
-    mean_squared_error,
-    make_scorer,
-)
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.linear_model import Lasso, Ridge, ElasticNet
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error, make_scorer
+from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
 from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
 
-# TODO: GET POWER CURVE
-
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 DATA_PATH = "data/activity_data_summarized.csv"
 MODEL_METRICS_SAVE_PATH = "data/model_metrics_route_time.csv"
 MODELS_SAVE_PATH = "models/"
-SCALER_SAVE_PATH = "models/scaler_route_time.pkl"
 
 PREDICT_FEATURE = "duration_seconds"
 IGNORE_COLUMNS = ["activity_id", "date"]
-
 
 def ensure_directories():
     os.makedirs(os.path.dirname(MODEL_METRICS_SAVE_PATH), exist_ok=True)
     os.makedirs(MODELS_SAVE_PATH, exist_ok=True)
 
-
-def save_metrics(path, metrics):
+def save_metrics(path: str, metrics: List[Dict]):
     df = pd.DataFrame(metrics)
     df["timestamp"] = pd.Timestamp.now()
     df.to_csv(path, index=False)
-    logging.info("Metrics saved to %s", path)
+    logging.info(f"Metrics saved to {path}")
 
-
-def save_model(path, model):
+def save_model(path: str, model: object):
     with open(path, "wb") as model_file:
         pickle.dump(model, model_file)
-    logging.info("Model saved to %s", path)
+    logging.info(f"Model saved to {path}")
 
-
-def save_scaler(path, scaler):
-    with open(path, "wb") as scaler_file:
-        pickle.dump(scaler, scaler_file)
-    logging.info("Scaler saved to %s", path)
-
-
-def process_data(data_path, predict_feature, ignore_columns):
+def process_data(data_path: str, predict_feature: str, ignore_columns: List[str]) -> Tuple:
     df = pd.read_csv(data_path).dropna()
     total_rows = df.shape[0]
     X = df.drop(columns=[predict_feature] + ignore_columns)
     y = df[predict_feature]
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
-    logging.info(
-        "Data processed. Total rows: %d, Train rows: %d, Test rows: %d",
-        total_rows,
-        len(X_train),
-        len(X_test),
-    )
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    logging.info(f"Data processed. Total rows: {total_rows}, Train rows: {len(X_train)}, Test rows: {len(X_test)}")
     return X_train, X_test, y_train, y_test, total_rows
 
-
-def scale_and_decompose(X_train, X_test):
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
-    return X_train_scaled, X_test_scaled, scaler
-
-
-def train_and_evaluate_model(X_train, y_train, X_test, y_test):
+def train_and_evaluate_model(X: pd.DataFrame, y: pd.Series) -> Tuple[List[Dict], Dict]:
     models = {
-        "RandomForest": RandomForestRegressor(),
-        "Lasso": Lasso(),
-        "Ridge": Ridge(),
+        "RandomForest": RandomForestRegressor(random_state=42),
+        "Lasso": Lasso(random_state=42),
+        "Ridge": Ridge(random_state=42),
+        "ElasticNet": ElasticNet(random_state=42),
     }
 
     param_grids = {
         "RandomForest": {
-            "n_estimators": [50, 100],
-            "max_depth": [None, 10],
+            "n_estimators": [50, 100, 200],
+            "max_depth": [None, 10, 20],
+            "min_samples_split": [2, 5, 10],
         },
         "Lasso": {
             "alpha": [0.1, 1, 10],
@@ -95,79 +67,72 @@ def train_and_evaluate_model(X_train, y_train, X_test, y_test):
             "alpha": [0.1, 1, 10],
             "max_iter": [1000, 5000],
         },
+        "ElasticNet": {
+            "alpha": [0.1, 1, 10],
+            "l1_ratio": [0.1, 0.5, 0.9],
+            "max_iter": [1000, 5000],
+        },
     }
 
     best_models = {}
     all_metrics = []
 
     for model_name, model in models.items():
-        logging.info("Training %s model", model_name)
+        logging.info(f"Training {model_name} model")
+        pipeline = Pipeline([
+            ('scaler', StandardScaler()),
+            ('model', model)
+        ])
+        
+        param_grid = {'model__' + key: value for key, value in param_grids[model_name].items()}
+        
         grid_search = GridSearchCV(
-            model, param_grids[model_name], cv=5, scoring=make_scorer(r2_score)
+            pipeline, param_grid, cv=5, scoring='neg_mean_squared_error', n_jobs=-1
         )
-        grid_search.fit(X_train, y_train)
+        grid_search.fit(X, y)
         best_model = grid_search.best_estimator_
 
-        y_pred = best_model.predict(X_test)
-        r2 = r2_score(y_test, y_pred)
-        mae = mean_absolute_error(y_test, y_pred)
-        mse = mean_squared_error(y_test, y_pred)
+        cv_scores = cross_val_score(best_model, X, y, cv=5, scoring='neg_mean_squared_error')
+        mse_scores = -cv_scores
+        r2_scores = cross_val_score(best_model, X, y, cv=5, scoring='r2')
 
         metrics = {
             "model": model_name,
-            "r2_score": r2,
-            "mean_absolute_error": mae,
-            "mean_squared_error": mse,
+            "r2_score_mean": np.mean(r2_scores),
+            "r2_score_std": np.std(r2_scores),
+            "mse_mean": np.mean(mse_scores),
+            "mse_std": np.std(mse_scores),
+            "mae_mean": np.mean(np.sqrt(mse_scores)),
+            "mae_std": np.std(np.sqrt(mse_scores)),
         }
 
-        logging.info(
-            "%s trained. R2: %.2f, MAE: %.2f, MSE: %.2f", model_name, r2, mae, mse
-        )
-        logging.info("Best model: %s", best_model)
+        logging.info(f"{model_name} trained. R2: {metrics['r2_score_mean']:.2f} (+/- {metrics['r2_score_std']:.2f}), "
+                     f"MSE: {metrics['mse_mean']:.2f} (+/- {metrics['mse_std']:.2f})")
+        logging.info(f"Best parameters: {grid_search.best_params_}")
 
         all_metrics.append(metrics)
         best_models[model_name] = best_model
 
     return all_metrics, best_models
 
-
-def main(st_pbar=None, st_message=None):
+def main():
     ensure_directories()
 
-    if st_pbar and st_message:
-        st_pbar.progress(10)
-        st_message.text("Processing data...")
-    X_train, X_test, y_train, y_test, total_rows = process_data(
-        DATA_PATH, PREDICT_FEATURE, IGNORE_COLUMNS
-    )
+    X_train, X_test, y_train, y_test, total_rows = process_data(DATA_PATH, PREDICT_FEATURE, IGNORE_COLUMNS)
     feature_names = X_train.columns.tolist()
 
-    if st_pbar and st_message:
-        st_pbar.progress(30)
-        st_message.text("Scaling and decomposing data...")
-    X_train_scaled, X_test_scaled, scaler = scale_and_decompose(X_train, X_test)
+    X = pd.concat([X_train, X_test])
+    y = pd.concat([y_train, y_test])
 
-    if st_pbar and st_message:
-        st_pbar.progress(60)
-        st_message.text("Training and evaluating models...")
-    metrics, models = train_and_evaluate_model(
-        X_train_scaled, y_train, X_test_scaled, y_test
-    )
+    metrics, models = train_and_evaluate_model(X, y)
 
     save_metrics(MODEL_METRICS_SAVE_PATH, metrics)
-    save_scaler(SCALER_SAVE_PATH, scaler)
 
     for model_name, model in models.items():
         model_path = os.path.join(MODELS_SAVE_PATH, f"{model_name}_model_route_time.pkl")
         save_model(model_path, model)
 
-    if st_pbar and st_message:
-        st_pbar.progress(100)
-        st_message.text("Training complete.")
-
-    # Return the metrics and models
     return metrics, models, feature_names, total_rows
-
 
 if __name__ == "__main__":
     main()

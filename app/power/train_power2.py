@@ -1,28 +1,22 @@
 import os
-
-os.environ['PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION'] = 'python'
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
 import logging
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from tensorflow.keras.layers import Dense, LSTM, Dropout, BatchNormalization, Conv1D, MaxPooling1D
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 import tensorflow as tf
-from tensorflow.keras.layers import RNN, LSTMCell
 from tensorflow.keras.callbacks import LearningRateScheduler, EarlyStopping
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, KFold
 from tensorflow.keras.regularizers import l2
 import joblib
-
 import optuna
 from optuna.integration import TFKerasPruningCallback
 import gc
 from tensorflow.keras.callbacks import ModelCheckpoint
 from itertools import combinations
+import shap
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -40,13 +34,11 @@ SCALER_PATH = "models/scaler_power.pkl"
 augmentation_methods = ['noise', 'scaling', 'shifting', 'time_warping']
 all_augmentation_combinations = [tuple(comb) for comb in sum([list(combinations(augmentation_methods, i)) for i in range(1, len(augmentation_methods) + 1)], [])]
 
-
-
 def load_activity_data(csv_path):
     logger.info(f"Loading data from {csv_path}")
     df = pd.read_csv(csv_path)
     df["timestamp"] = pd.to_datetime(df["timestamp"])
-    logger.info("Data loaded successfully")
+    logger.info(f"Data loaded successfully. Shape: {df.shape}")
     return df
 
 def ensure_dir(file_path):
@@ -56,6 +48,8 @@ def ensure_dir(file_path):
 
 def preprocess_data(df, drop_activities_with_workout=False):
     logger.info("Starting data preprocessing")
+    logger.info(f"Initial shape: {df.shape}")
+    
     df = df.sort_values(by=["activity_id", "timestamp"])
     df["altitude_diff"] = df["altitude"].diff()
     df["distance_diff"] = df["distance"].diff()
@@ -64,66 +58,21 @@ def preprocess_data(df, drop_activities_with_workout=False):
     df["seconds_from_start"] = (df["timestamp"] - df["timestamp"].iloc[0]).dt.total_seconds()
     df.rename(columns={"distance": "distance_meters"}, inplace=True)
     
-    df.fillna(method='ffill', inplace=True)
-    df.fillna(method='bfill', inplace=True)
+    logger.info("Interpolating data...")
+    df = df.groupby('activity_id').apply(lambda x: x.infer_objects().interpolate(method='linear')).reset_index(drop=True)
+    logger.info("Filling NaN values...")
+    df = df.ffill().bfill()
 
     df["power_5s_avg"] = df["power"].rolling(window=5, min_periods=1).mean()
     df["grade_5s_avg"] = df["grade"].rolling(window=5, min_periods=1).mean()
     df["grade_30s_avg"] = df["grade"].rolling(window=30, min_periods=1).mean()
 
-    planned_workouts = pd.read_csv(PLANNED_WORKOUTS_PATH)
-
-    if drop_activities_with_workout:
-        intersecting_activities = planned_workouts["paired_activity_id"].unique()
-        logger.info(f"Dropping {len(intersecting_activities)} activities with planned workouts")
-        df = df[~df["activity_id"].isin(intersecting_activities)]
-        logger.info(f"Remaining activities: {df['activity_id'].nunique()}")
-
-    rows_na = df.isna().sum().sum()
-    df.dropna(inplace=True)
-    logger.info(f"Dropped {rows_na} rows with NaN values")
-    if df[ALL_FEATURES].isnull().values.any() or np.isinf(df[ALL_FEATURES]).values.any():
-        logger.error("NaN or infinite values found in the data")
-        raise ValueError("NaN or infinite values found in the data")
-
-    logger.info("Data preprocessing completed")
+    logger.info(f"Shape after preprocessing: {df.shape}")
+    
+    if df.isnull().sum().sum() > 0:
+        logger.warning(f"There are still NaN values in the dataset: {df.isnull().sum()}")
+    
     return df
-
-def split_by_activities(df, test_size=0.2, val_size=0.1):
-    activity_ids = df['activity_id'].unique()
-    train_ids, test_ids = train_test_split(activity_ids, test_size=test_size, random_state=42)
-    train_ids, val_ids = train_test_split(train_ids, test_size=val_size / (1 - test_size), random_state=42)
-    
-    train_df = df[df['activity_id'].isin(train_ids)]
-    val_df = df[df['activity_id'].isin(val_ids)]
-    test_df = df[df['activity_id'].isin(test_ids)]
-    
-    return train_df, val_df, test_df
-
-def scale_data(train, val, test, scaler_type="StandardScaler"):
-    if scaler_type == "StandardScaler":
-        feature_scaler = StandardScaler()
-        target_scaler = StandardScaler()
-    elif scaler_type == "MinMaxScaler":
-        feature_scaler = MinMaxScaler()
-        target_scaler = MinMaxScaler()
-
-    feature_scaler.fit(train[FEATURES])  
-    target_scaler.fit(train[TARGET_FEATURES])  
-
-    train_scaled = train.copy()
-    val_scaled = val.copy()
-    test_scaled = test.copy()
-
-    train_scaled[FEATURES] = feature_scaler.transform(train[FEATURES])
-    val_scaled[FEATURES] = feature_scaler.transform(val[FEATURES])
-    test_scaled[FEATURES] = feature_scaler.transform(test[FEATURES])
-
-    train_scaled[TARGET_FEATURES] = target_scaler.transform(train[TARGET_FEATURES])
-    val_scaled[TARGET_FEATURES] = target_scaler.transform(val[TARGET_FEATURES])
-    test_scaled[TARGET_FEATURES] = target_scaler.transform(test[TARGET_FEATURES])
-    
-    return train_scaled, val_scaled, test_scaled, feature_scaler, target_scaler
 
 
 def augment_data(seq, aug_methods):
@@ -144,7 +93,6 @@ def augment_data(seq, aug_methods):
         warped_seq = np.array([np.interp(time_steps, warp_steps, seq[:, i]) for i in range(seq.shape[1])]).T
         return warped_seq
     return seq
-
 
 def create_sequences(data, sequence_length, target_columns, augmentation=None):
     num_records = len(data)
@@ -172,6 +120,11 @@ def scheduler(epoch, lr):
     else:
         return float(lr * tf.math.exp(-0.1))
 
+def scheduler(epoch, lr):
+    if epoch < 10:
+        return float(lr)
+    else:
+        return float(lr * tf.math.exp(-0.1))
 
 def build_model(
         learning_rate=0.001,
@@ -273,16 +226,79 @@ def objective(trial, train_df, val_df, test_df):
 
     return val_loss
 
+def evaluate_model(model, X, y):
+    predictions = model.predict(X)
+    mse = np.mean((predictions - y) ** 2)
+    mae = np.mean(np.abs(predictions - y))
+    mape = np.mean(np.abs((y - predictions) / y)) * 100
+    return {'MSE': mse, 'MAE': mae, 'MAPE': mape}
+
+def split_by_activities(df):
+    if df is None or df.empty:
+        logger.error("DataFrame is None or empty in split_by_activities")
+        return None, None, None
+    
+    activity_ids = df['activity_id'].unique()
+    train_ids, test_ids = train_test_split(activity_ids, test_size=0.2, random_state=42)
+    train_ids, val_ids = train_test_split(train_ids, test_size=0.1 / 0.8, random_state=42)
+    
+    train_df = df[df['activity_id'].isin(train_ids)]
+    val_df = df[df['activity_id'].isin(val_ids)]
+    test_df = df[df['activity_id'].isin(test_ids)]
+    
+    logger.info(f"Train set shape: {train_df.shape}")
+    logger.info(f"Validation set shape: {val_df.shape}")
+    logger.info(f"Test set shape: {test_df.shape}")
+    
+    return train_df, val_df, test_df
+
+def scale_data(train, val, test, scaler_type="StandardScaler"):
+    if scaler_type == "StandardScaler":
+        feature_scaler = StandardScaler()
+        target_scaler = StandardScaler()
+    elif scaler_type == "MinMaxScaler":
+        feature_scaler = MinMaxScaler()
+        target_scaler = MinMaxScaler()
+
+    feature_scaler.fit(train[FEATURES])  
+    target_scaler.fit(train[TARGET_FEATURES])  
+
+    train_scaled = train.copy()
+    val_scaled = val.copy()
+    test_scaled = test.copy()
+
+    train_scaled[FEATURES] = feature_scaler.transform(train[FEATURES])
+    val_scaled[FEATURES] = feature_scaler.transform(val[FEATURES])
+    test_scaled[FEATURES] = feature_scaler.transform(test[FEATURES])
+
+    train_scaled[TARGET_FEATURES] = target_scaler.transform(train[TARGET_FEATURES])
+    val_scaled[TARGET_FEATURES] = target_scaler.transform(val[TARGET_FEATURES])
+    test_scaled[TARGET_FEATURES] = target_scaler.transform(test[TARGET_FEATURES])
+    
+    return train_scaled, val_scaled, test_scaled, feature_scaler, target_scaler
 
 def main():
     df = load_activity_data(RAW_DATA_PATH)
+    if df is None or df.empty:
+        logger.error("Failed to load data")
+        return
+
     df = preprocess_data(df, drop_activities_with_workout=True)
+    if df is None or df.empty:
+        logger.error("Failed to preprocess data")
+        return
+
     train_df, val_df, test_df = split_by_activities(df)
+    if train_df is None or val_df is None or test_df is None:
+        logger.error("Failed to split data")
+        return
 
     study_name = "power_study"  
     storage_name = "sqlite:///power_study.db"  
 
     study = optuna.create_study(study_name=study_name, direction='minimize', storage=storage_name, load_if_exists=True)
+
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
 
     try:
         study.optimize(lambda trial: objective(trial, train_df, val_df, test_df), n_trials=50)  
@@ -342,13 +358,22 @@ def main():
         ], verbose=2)
 
         test_sequences, test_targets = create_sequences(test_scaled, results['sequence_length'], TARGET_FEATURES)
-        test_loss = model.evaluate(test_sequences, test_targets)
-        print(f"Test Loss: {test_loss}")
+        test_metrics = evaluate_model(model, test_sequences, test_targets)
+        print("Test Metrics:")
+        for metric, value in test_metrics.items():
+            print(f"{metric}: {value}")
 
         model.save(MODEL_PATH)
         joblib.dump(feature_scaler, "models/feature_scaler.pkl")
         joblib.dump(target_scaler, "models/target_scaler.pkl")
 
+        # SHAP values calculation
+        explainer = shap.DeepExplainer(model, train_sequences[:100])
+        shap_values = explainer.shap_values(test_sequences[:100])
+        
+        shap.summary_plot(shap_values[0], test_sequences[:100], feature_names=FEATURES, show=False)
+        plt.savefig('shap_summary_plot.png')
+        plt.close()
 
 if __name__ == "__main__":
     main()
