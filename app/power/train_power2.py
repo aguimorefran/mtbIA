@@ -15,7 +15,9 @@ import optuna
 from optuna.integration import TFKerasPruningCallback
 import gc
 from tensorflow.keras.callbacks import ModelCheckpoint
+from tensorflow.keras.models import load_model
 from itertools import combinations
+import matplotlib.pyplot as plt
 import shap
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
@@ -211,14 +213,21 @@ def objective(trial, train_df, val_df, test_df):
     train_sequences, train_targets_seq = create_sequences(train_scaled, sequence_length, TARGET_FEATURES, augmentation_methods)
     val_sequences, val_targets_seq = create_sequences(val_scaled, sequence_length, TARGET_FEATURES)
 
-    history = model.fit(train_sequences, train_targets_seq, batch_size=batch_size, epochs=50, validation_data=(val_sequences, val_targets_seq), callbacks=[
-        TFKerasPruningCallback(trial, 'val_loss'),
-        LearningRateScheduler(scheduler),
-        EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True),
-        checkpoint_callback
-    ], verbose=0)
+    history = model.fit(train_sequences, train_targets_seq, batch_size=batch_size, epochs=50, 
+                        validation_data=(val_sequences, val_targets_seq), 
+                        callbacks=[
+                            TFKerasPruningCallback(trial, 'val_loss'),
+                            LearningRateScheduler(scheduler),
+                            EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True),
+                            ModelCheckpoint(filepath=f'checkpoint_trial_{trial.number}.weights.h5', 
+                                            save_weights_only=True, save_best_only=True, 
+                                            monitor='val_loss', verbose=1)
+                        ], verbose=0)
 
     val_loss = min(history.history['val_loss'])
+
+    save_best_model(study, trial)
+
 
     del model
     tf.keras.backend.clear_session()
@@ -277,7 +286,31 @@ def scale_data(train, val, test, scaler_type="StandardScaler"):
     
     return train_scaled, val_scaled, test_scaled, feature_scaler, target_scaler
 
+def save_best_model(study, trial):
+    """Save the best model after each trial"""
+    best_trial = study.best_trial
+    if best_trial.number == trial.number:
+        best_params = trial.params
+        model = build_model(
+            learning_rate=best_params['learning_rate'],
+            cnn_filters=best_params['cnn_filters'],
+            lstm_units=best_params['lstm_units'],
+            lstm_layers=best_params['lstm_layers'],
+            dense_units=best_params['dense_units'],
+            dense_layers=best_params['dense_layers'],
+            dropout_rate_lstm=best_params['dropout_rate_lstm'],
+            dropout_rate_dense=best_params['dropout_rate_dense'],
+            dropout_rate_cnn=best_params['dropout_rate_cnn'],
+            l2_reg=best_params['l2_reg'],
+            sequence_length=best_params['sequence_length']
+        )
+        model.load_weights(f'checkpoint_trial_{trial.number}.weights.h5')
+        model.save(MODEL_PATH)
+        joblib.dump(best_params, "models/best_params.pkl")
+        print(f"New best model saved with trial number {trial.number}")
+
 def main():
+    logger.info("Starting data fetch")
     df = load_activity_data(RAW_DATA_PATH)
     if df is None or df.empty:
         logger.error("Failed to load data")
@@ -298,82 +331,50 @@ def main():
 
     study = optuna.create_study(study_name=study_name, direction='minimize', storage=storage_name, load_if_exists=True)
 
-    kf = KFold(n_splits=5, shuffle=True, random_state=42)
-
     try:
         study.optimize(lambda trial: objective(trial, train_df, val_df, test_df), n_trials=50)  
+    except KeyboardInterrupt:
+        print("Optimization interrupted. The best model so far has been saved.")
     except Exception as e:
         print(f"Optimization failed with exception: {e}")
 
-    if len(study.trials) > 0 and study.best_trial is not None:
-        best_trial = study.best_trial
-        results = {
-            'learning_rate': best_trial.params['learning_rate'],
-            'sequence_length': best_trial.params['sequence_length'],
-            'lstm_units': best_trial.params['lstm_units'],
-            'lstm_layers': best_trial.params['lstm_layers'],
-            'dense_units': best_trial.params['dense_units'],
-            'dense_layers': best_trial.params['dense_layers'],
-            'dropout_rate_lstm': best_trial.params['dropout_rate_lstm'],
-            'dropout_rate_dense': best_trial.params['dropout_rate_dense'],
-            'dropout_rate_cnn': best_trial.params['dropout_rate_cnn'],
-            'l2_reg': best_trial.params['l2_reg'],
-            'cnn_filters': best_trial.params['cnn_filters'],
-            'augmentation_methods': best_trial.params['augmentation_methods'],
-            'scaler_type': best_trial.params['scaler_type'],
-            'val_loss': best_trial.value
-        }
+    # Load the best model and parameters
+    best_params = joblib.load("models/best_params.pkl")
+    model = load_model(MODEL_PATH)
 
-        results_df = pd.DataFrame([results])
-        results_df.to_csv(METRICS_PATH, index=False)
+    # Scale the data using the best scaler type
+    train_scaled, val_scaled, test_scaled, feature_scaler, target_scaler = scale_data(train_df, val_df, test_df, best_params['scaler_type'])
 
-        train_scaled, val_scaled, test_scaled, feature_scaler, target_scaler = scale_data(train_df, val_df, test_df, results['scaler_type'])
+    # Create sequences using the best sequence length
+    train_sequences, train_targets = create_sequences(train_scaled, best_params['sequence_length'], TARGET_FEATURES, best_params['augmentation_methods'])
+    val_sequences, val_targets = create_sequences(val_scaled, best_params['sequence_length'], TARGET_FEATURES)
+    test_sequences, test_targets = create_sequences(test_scaled, best_params['sequence_length'], TARGET_FEATURES)
 
-        train_sequences, train_targets = create_sequences(train_scaled, results['sequence_length'], TARGET_FEATURES, results['augmentation_methods'])
-        val_sequences, val_targets = create_sequences(val_scaled, results['sequence_length'], TARGET_FEATURES)
+    # Final evaluation
+    test_metrics = evaluate_model(model, test_sequences, test_targets)
+    print("Final Test Metrics:")
+    for metric, value in test_metrics.items():
+        print(f"{metric}: {value}")
 
-        model = build_model(
-            learning_rate=results['learning_rate'],
-            cnn_filters=results['cnn_filters'],
-            lstm_units=results['lstm_units'],
-            lstm_layers=results['lstm_layers'],
-            dense_units=results['dense_units'],
-            dense_layers=results['dense_layers'],
-            dropout_rate_lstm=results['dropout_rate_lstm'],
-            dropout_rate_dense=results['dropout_rate_dense'],
-            dropout_rate_cnn=results['dropout_rate_cnn'],
-            l2_reg=results['l2_reg'],
-            sequence_length=results['sequence_length']
-        )
+    # Save the final model and scalers
+    model.save(MODEL_PATH)
+    joblib.dump(feature_scaler, "models/feature_scaler.pkl")
+    joblib.dump(target_scaler, "models/target_scaler.pkl")
 
-        model.summary()
+    # SHAP values calculation
+    explainer = shap.DeepExplainer(model, train_sequences[:100])
+    shap_values = explainer.shap_values(test_sequences[:100])
+    
+    shap.summary_plot(shap_values[0], test_sequences[:100], feature_names=FEATURES, show=False)
+    plt.savefig('shap_summary_plot.png')
+    plt.close()
 
-        BATCH_SIZE = 1024
-        EPOCHS = 50
-        PATIENCE = 5
+    # Clean up checkpoint files
+    for file in os.listdir():
+        if file.startswith("checkpoint_trial_") and file.endswith(".weights.h5"):
+            os.remove(file)
 
-        history = model.fit(train_sequences, train_targets, batch_size=BATCH_SIZE, epochs=EPOCHS, validation_data=(val_sequences, val_targets), callbacks=[
-            LearningRateScheduler(scheduler),
-            EarlyStopping(monitor='val_loss', patience=PATIENCE, restore_best_weights=True)
-        ], verbose=2)
-
-        test_sequences, test_targets = create_sequences(test_scaled, results['sequence_length'], TARGET_FEATURES)
-        test_metrics = evaluate_model(model, test_sequences, test_targets)
-        print("Test Metrics:")
-        for metric, value in test_metrics.items():
-            print(f"{metric}: {value}")
-
-        model.save(MODEL_PATH)
-        joblib.dump(feature_scaler, "models/feature_scaler.pkl")
-        joblib.dump(target_scaler, "models/target_scaler.pkl")
-
-        # SHAP values calculation
-        explainer = shap.DeepExplainer(model, train_sequences[:100])
-        shap_values = explainer.shap_values(test_sequences[:100])
-        
-        shap.summary_plot(shap_values[0], test_sequences[:100], feature_names=FEATURES, show=False)
-        plt.savefig('shap_summary_plot.png')
-        plt.close()
+    logger.info("Training and evaluation completed successfully")
 
 if __name__ == "__main__":
     main()
